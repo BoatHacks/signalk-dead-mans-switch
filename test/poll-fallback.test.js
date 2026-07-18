@@ -125,3 +125,40 @@ test('polling is skipped gracefully if the host does not provide app.getSelfPath
   t.after(() => plugin.stop())
   t.mock.timers.tick(POLL_INTERVAL_MS * 3) // should not throw even with time passing
 })
+
+test('regression: a server that keeps status.acknowledged sticky on a notification id must not perpetually re-arm and reset the timer', (t) => {
+  // Real-world bug captured live: after acknowledging while at "alert",
+  // the server kept status.acknowledged: true on that notification id
+  // even under the plugin's own subsequent "armed" resting publish.
+  // Before the fix, every poll saw that same stale "acknowledged: true",
+  // called arm() again, and reset the 60s check-in timer back to full -
+  // so the switch could never actually count down again.
+  const { app, plugin } = setup(t)
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+
+  t.mock.timers.tick(60_000) // -> alert
+  assert.equal(app.lastValueFor(PATH).state, 'alert')
+
+  // External ack while escalated - legitimately arms.
+  app._setPathValueWithoutBusEvent(PATH, { state: 'alert', method: [], status: { acknowledged: true } })
+  t.mock.timers.tick(POLL_INTERVAL_MS)
+  let res = router.call('get', '/status', undefined)
+  assert.equal(res.body.state, 'armed')
+  assert.equal(res.body.secondsRemaining, 60)
+
+  // Simulate the server's sticky behavior: it keeps reporting
+  // acknowledged: true even under our own fresh "armed" resting value.
+  app._setPathValueWithoutBusEvent(PATH, { state: 'normal', message: 'armed', method: [], status: { acknowledged: true } })
+
+  // Several poll cycles pass with that same stuck signal.
+  t.mock.timers.tick(POLL_INTERVAL_MS)
+  t.mock.timers.tick(POLL_INTERVAL_MS)
+  t.mock.timers.tick(POLL_INTERVAL_MS)
+  t.mock.timers.tick(POLL_INTERVAL_MS)
+  t.mock.timers.tick(POLL_INTERVAL_MS) // 5 * 2000ms = 10s elapsed since the ack
+
+  res = router.call('get', '/status', undefined)
+  assert.equal(res.body.state, 'armed', 'must still just be armed - not disarmed, not re-escalated')
+  assert.equal(res.body.secondsRemaining, 50, 'the timer must have actually counted down, not kept resetting to 60')
+})

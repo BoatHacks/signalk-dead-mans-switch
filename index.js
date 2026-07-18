@@ -382,21 +382,32 @@ module.exports = function (app) {
     // still happens.
     const acknowledgedViaStatus = !!status && status.acknowledged === true
     const acknowledgedViaMethod = Array.isArray(method) && !method.includes('sound')
+    const stageIndex = STAGES.indexOf(externalState)
 
-    if (acknowledgedViaStatus || acknowledgedViaMethod) {
-      arm(`${sourceDescription}: ${acknowledgedViaStatus ? 'status.acknowledged' : 'method no longer includes sound'}`)
+    if (acknowledgedViaStatus || acknowledgedViaMethod || stageIndex === -1) {
+      // Ack-equivalent signal (explicit flag, method stripped, or a
+      // cleared/non-stage value). Only meaningful when there's actually
+      // something escalated to acknowledge - if we're already just
+      // "armed", there's nothing to do. This matters because some
+      // servers keep status.acknowledged STICKY on a notification id
+      // even after we publish a fresh resting "armed" value under it -
+      // without this guard, every subsequent poll would see that same
+      // stale "acknowledged: true", call arm() again, and reset the
+      // 60s-style check-in timer back to full every ~2s forever, so the
+      // switch could never actually escalate again.
+      if (state === 'armed') {
+        debugLog(`  -> no-op (${sourceDescription}): already armed, nothing to acknowledge`)
+        return
+      }
+      arm(
+        `${sourceDescription}: ${
+          acknowledgedViaStatus ? 'status.acknowledged' : acknowledgedViaMethod ? 'method no longer includes sound' : 'cleared or non-stage state'
+        }`
+      )
       return
     }
 
-    const stageIndex = STAGES.indexOf(externalState)
-
-    if (stageIndex !== -1) {
-      escalateTo(stageIndex, `${sourceDescription}: stage write`)
-    } else {
-      // Cleared, or set to some state we don't recognize as one of our
-      // stages (e.g. "normal") - treat either as an acknowledgement.
-      arm(`${sourceDescription}: cleared or non-stage state`)
-    }
+    escalateTo(stageIndex, `${sourceDescription}: stage write`)
   }
 
   function handleExternalNotificationChange(delta) {

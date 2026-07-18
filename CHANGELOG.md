@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- The poll fallback (added just above) had a bug of its own, caught via
+  debug logging on a real server: some servers keep `status.acknowledged:
+  true` STICKY on a notification id even after the plugin publishes a
+  fresh "armed" resting value under it. Every poll saw that same stale
+  flag, called `arm()` again, and reset the check-in timer back to full
+  every ~2s - so the switch could never actually count down again after
+  an external acknowledgement. Fixed: an ack-equivalent signal
+  (`status.acknowledged`, method stripped, or a cleared/non-stage value)
+  is now only acted on when there's actually something escalated to
+  acknowledge - a no-op while already just "armed".
 - External changes on the notification path (acknowledgements, other
   plugins/devices writing to it) were sometimes never seen at all -
   debug logging showed no `INPUT external delta` ever arriving on some
