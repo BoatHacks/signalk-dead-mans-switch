@@ -136,6 +136,49 @@ test('theme toggle button is present and flips data-theme on the document', asyn
   assert.notEqual(before, after)
 })
 
+test('disarm button asks for confirmation before POSTing to /disarm', async (t) => {
+  const calls = []
+  const fetchImpl = async (url, opts) => {
+    calls.push({ url: String(url), method: (opts && opts.method) || 'GET' })
+    if (String(url).endsWith('/status')) {
+      return {
+        ok: true,
+        status: 200,
+        url,
+        json: async () => ({
+          state: 'armed',
+          secondsRemaining: 900,
+          deadlineAt: Date.now() + 900000,
+          notificationPath: 'notifications.security.deadmansswitch',
+          config: { checkIntervalMinutes: 15, ackWindowSeconds: 90, warnWindowSeconds: 60, alarmWindowSeconds: 60 },
+        }),
+      }
+    }
+    return { ok: true, status: 200, url, json: async () => ({ ok: true }) }
+  }
+
+  const { dom, doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  const button = doc.querySelector('button.disarm-btn')
+  assert.ok(button, 'disarm button should be present')
+
+  // Declining the confirmation must not send the request.
+  dom.window.confirm = () => false
+  button.dispatchEvent(new Event('click', { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  assert.ok(!calls.some((c) => c.url.endsWith('/disarm')), 'no /disarm call after declining confirmation')
+
+  // Accepting it does send the request.
+  dom.window.confirm = () => true
+  button.dispatchEvent(new Event('click', { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  assert.ok(
+    calls.some((c) => c.url.endsWith('/disarm') && c.method === 'POST'),
+    `expected a POST to /disarm after accepting confirmation, got: ${JSON.stringify(calls)}`
+  )
+})
+
 test('BASE is a fixed absolute /plugins/<id> path, not derived from window.location', () => {
   const html = fs.readFileSync(INDEX_HTML, 'utf8')
   assert.match(html, /const BASE = '\/plugins\/signalk-dead-mans-switch'/)

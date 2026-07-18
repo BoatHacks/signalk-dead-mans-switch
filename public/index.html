@@ -308,6 +308,16 @@ function App() {
       .catch((e) => setError(e.message))
   }
 
+  function handleDisarm() {
+    // Disarming silences the check-in entirely - a native confirm() here
+    // matches the pattern used for other destructive/state-losing actions
+    // across his other plugins (e.g. signalk-stowage-mgmt's delete
+    // confirmations), rather than introducing a bespoke modal for just
+    // this one button.
+    if (window.confirm('Disarm the dead man\u2019s switch? No check-ins will be requested until it is re-armed.')) {
+      post('/disarm')
+    }
+  }
   function handleAckButton() {
     if (status && status.state === 'disarmed') {
       post('/arm')
@@ -358,7 +368,7 @@ function App() {
           ${ACK_LABEL[stage] || 'ACKNOWLEDGE'}
         </button>
         ${stage !== 'disarmed' &&
-        html`<button class="disarm-btn" onClick=${() => post('/disarm')}>Disarm</button>`}
+        html`<button class="disarm-btn" onClick=${handleDisarm}>Disarm</button>`}
       </div>
     </main>
   `

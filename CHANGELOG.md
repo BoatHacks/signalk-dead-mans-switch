@@ -5,6 +5,9 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Disarm now asks for confirmation (native `confirm()`, matching the
+  convention used for destructive actions in his other plugins) before
+  actually disarming.
 - Webapp redesign: removed the title bar; the current-state indicator is
   now a dedicated (non-interactive) button, with a horizontal countdown
   progress bar between it and the arm/reset button; the disarm button now
