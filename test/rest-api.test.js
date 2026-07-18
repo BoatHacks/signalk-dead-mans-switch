@@ -1,0 +1,59 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const { makeFakeApp, makeFakeRouter } = require('../test-support/fake-app')
+const buildPlugin = require('../index.js')
+
+function setup(t, opts = {}) {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const app = makeFakeApp()
+  const plugin = buildPlugin(app)
+  plugin.start({ checkIntervalMinutes: 1, ackWindowSeconds: 30, warnWindowSeconds: 20, alarmWindowSeconds: 10, ...opts })
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+  t.after(() => plugin.stop())
+  return { app, plugin, router }
+}
+
+test('GET /status reflects armed state with a countdown', (t) => {
+  const { router } = setup(t)
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.headers['Cache-Control'], 'no-store')
+  assert.equal(res.body.state, 'armed')
+  assert.equal(res.body.secondsRemaining, 60)
+})
+
+test('GET /status reflects escalated stage and shrinking countdown', (t) => {
+  const { router } = setup(t)
+  t.mock.timers.tick(60_000) // -> alert, 30s window
+  t.mock.timers.tick(10_000)
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.body.state, 'alert')
+  assert.equal(res.body.secondsRemaining, 20)
+})
+
+test('GET /status has no countdown once emergency is reached', (t) => {
+  const { router } = setup(t)
+  t.mock.timers.tick(60_000)
+  t.mock.timers.tick(30_000)
+  t.mock.timers.tick(20_000)
+  t.mock.timers.tick(10_000)
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.body.state, 'emergency')
+  assert.equal(res.body.secondsRemaining, null)
+})
+
+test('POST /ack while disarmed is a no-op', (t) => {
+  const { router } = setup(t)
+  router.call('post', '/disarm', {})
+  const res = router.call('post', '/ack', {})
+  assert.equal(res.body.ok, false)
+  assert.equal(res.body.state, 'disarmed')
+})
+
+test('POST /arm re-arms and returns the fresh countdown', (t) => {
+  const { router } = setup(t)
+  router.call('post', '/disarm', {})
+  const res = router.call('post', '/arm', {})
+  assert.equal(res.body.state, 'armed')
+  assert.equal(res.body.secondsRemaining, 60)
+})

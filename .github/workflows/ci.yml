@@ -1,0 +1,18 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  plugin-ci:
+    # Reusable SignalK plugin CI workflow (lives in SignalK/signalk-server).
+    # Runs our test suite across the desktop matrix (Linux/macOS/Windows,
+    # Linux arm64, and armv7 under QEMU for embedded-class hardware) on the
+    # Node versions below. See the canonical workflow for the full set of
+    # inputs: https://github.com/SignalK/signalk-server/blob/master/.github/workflows/plugin-ci.yml
+    uses: SignalK/signalk-server/.github/workflows/plugin-ci.yml@master
+    with:
+      test-command: npm test
+      node-versions: '["22", "24"]'

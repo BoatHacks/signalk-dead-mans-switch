@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="version" content="0.1.0" />
+<title>Dead Man's Switch</title>
+<style>
+  :root {
+    --bg: #10151b;
+    --panel: #1a222b;
+    --border: #2c3946;
+    --text: #e4ebf1;
+    --text-dim: #8ea0b0;
+    --armed: #3fa6e0;
+    --alert: #d9b53f;
+    --warn: #e08a3f;
+    --alarm: #e05656;
+    --emergency: #ff2b2b;
+    --disarmed: #5a6b7a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; color: var(--text-dim); font-size: 13px; }
+  main {
+    padding: 24px 20px 40px;
+    max-width: 520px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+  .status-panel {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+  .stage-label {
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 0 0 6px;
+  }
+  .stage-value {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0;
+  }
+  .countdown {
+    font-size: 15px;
+    color: var(--text-dim);
+    margin: 10px 0 0;
+  }
+  .message {
+    margin: 12px 0 0;
+    font-size: 14px;
+    color: var(--text);
+  }
+  button.ack {
+    width: 100%;
+    max-width: 320px;
+    padding: 28px 20px;
+    font-size: 22px;
+    font-weight: 700;
+    border-radius: 16px;
+    border: none;
+    cursor: pointer;
+    color: #08131c;
+    background: var(--armed);
+    transition: background 0.2s ease, transform 0.05s ease;
+  }
+  button.ack:active { transform: scale(0.98); }
+  button.ack.pulse {
+    animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 43, 43, 0.55); }
+    50% { box-shadow: 0 0 0 18px rgba(255, 43, 43, 0); }
+  }
+  .controls {
+    display: flex;
+    gap: 10px;
+  }
+  button.secondary {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .error-banner {
+    width: 100%;
+    background: rgba(224, 86, 86, 0.15);
+    border: 1px solid var(--alarm);
+    color: var(--alarm);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+  .disarmed-note {
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+import { render, html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js'
+
+// A plugin's registerWithRouter() API is always mounted at
+// /plugins/<pluginId>, regardless of where the webapp's own static files
+// (this page) are served from under the signalk-webapp convention - so
+// this must be a fixed absolute path, not derived from window.location.
+const BASE = '/plugins/signalk-dead-mans-switch'
+
+const STAGE_COLOR = {
+  disarmed: 'var(--disarmed)',
+  armed: 'var(--armed)',
+  alert: 'var(--alert)',
+  warn: 'var(--warn)',
+  alarm: 'var(--alarm)',
+  emergency: 'var(--emergency)',
+}
+
+const STAGE_TITLE = {
+  disarmed: 'Disarmed',
+  armed: 'Armed \u2013 watching',
+  alert: 'Alert \u2013 are you there?',
+  warn: 'Warn \u2013 still waiting',
+  alarm: 'Alarm \u2013 escalating',
+  emergency: 'EMERGENCY \u2013 watch incapacitated',
+}
+
+const ACK_LABEL = {
+  disarmed: 'Arm',
+  armed: 'I\u2019m here (reset timer)',
+  alert: 'ACKNOWLEDGE',
+  warn: 'ACKNOWLEDGE',
+  alarm: 'ACKNOWLEDGE',
+  emergency: 'ACKNOWLEDGE',
+}
+
+function formatSeconds(s) {
+  if (s === null || s === undefined) return null
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return m > 0 ? `${m}m ${sec}s` : `${sec}s`
+}
+
+function App() {
+  const [status, setStatus] = useState(null)
+  const [error, setError] = useState(null)
+  const pollRef = useRef(null)
+
+  // fetch() only rejects on a network-level failure, NOT on an HTTP error
+  // status - without this check a 404 from a wrong path would silently
+  // leave the page showing stale/blank state forever.
+  function checkOk(res) {
+    if (!res.ok) throw new Error(`Request to ${res.url} failed: HTTP ${res.status}`)
+    return res
+  }
+
+  function loadStatus() {
+    fetch(`${BASE}/status`, { cache: 'no-store' })
+      .then(checkOk)
+      .then((r) => r.json())
+      .then((s) => {
+        setStatus(s)
+        setError(null)
+      })
+      .catch((e) => setError(e.message))
+  }
+
+  useEffect(() => {
+    loadStatus()
+    pollRef.current = setInterval(loadStatus, 1000)
+    return () => clearInterval(pollRef.current)
+  }, [])
+
+  function post(path) {
+    fetch(`${BASE}${path}`, { method: 'POST', cache: 'no-store' })
+      .then(checkOk)
+      .then(() => loadStatus())
+      .catch((e) => setError(e.message))
+  }
+
+  function handleAckButton() {
+    if (status && status.state === 'disarmed') {
+      post('/arm')
+    } else {
+      post('/ack')
+    }
+  }
+
+  if (!status) {
+    return html`<main><p class="disarmed-note">Loading\u2026</p></main>`
+  }
+
+  const stage = status.state
+  const color = STAGE_COLOR[stage] || 'var(--armed)'
+  const isEscalated = ['alert', 'warn', 'alarm', 'emergency'].includes(stage)
+  const remaining = formatSeconds(status.secondsRemaining)
+
+  return html`
+    <header>
+      <h1>Dead Man's Switch</h1>
+      <p>Check in periodically, or the watch alarm escalates.</p>
+    </header>
+    <main>
+      ${error && html`<div class="error-banner">${error}</div>`}
+      <div class="status-panel" style=${{ borderColor: color }}>
+        <p class="stage-label">Current state</p>
+        <p class="stage-value" style=${{ color }}>${STAGE_TITLE[stage] || stage}</p>
+        ${remaining !== null &&
+        html`<p class="countdown">
+          ${isEscalated ? 'Escalates in ' : 'Next check-in in '}${remaining}
+        </p>`}
+        ${stage === 'emergency' &&
+        html`<p class="countdown">No further auto-escalation \u2013 acknowledge to reset.</p>`}
+        ${stage === 'disarmed' && html`<p class="countdown">Switch is disarmed.</p>`}
+      </div>
+      <button
+        class=${`ack ${stage === 'alarm' || stage === 'emergency' ? 'pulse' : ''}`}
+        style=${{ background: stage === 'disarmed' ? 'var(--armed)' : color }}
+        onClick=${handleAckButton}
+      >
+        ${ACK_LABEL[stage] || 'ACKNOWLEDGE'}
+      </button>
+      <div class="controls">
+        ${stage !== 'disarmed' &&
+        html`<button class="secondary" onClick=${() => post('/disarm')}>Disarm</button>`}
+      </div>
+    </main>
+  `
+}
+
+render(html`<${App} />`, document.getElementById('app'))
+</script>
+</body>
+</html>

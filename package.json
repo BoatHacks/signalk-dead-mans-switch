@@ -1,0 +1,28 @@
+{
+  "name": "signalk-dead-mans-switch",
+  "version": "0.1.0",
+  "description": "SignalK plugin implementing a watch dead man's switch: periodic 'you still there?' check-ins that escalate through alert -> warn -> alarm -> emergency notification states until acknowledged",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test --test-force-exit"
+  },
+  "keywords": [
+    "signalk-node-server-plugin",
+    "signalk-webapp",
+    "signalk-category-safety"
+  ],
+  "signalk-plugin-enabled-by-default": false,
+  "author": "Tobias Rosenstock (humppafreak)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BoatHacks/signalk-dead-mans-switch.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}
