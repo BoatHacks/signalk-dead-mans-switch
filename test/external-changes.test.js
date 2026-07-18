@@ -251,3 +251,30 @@ test('real-world captured payload: Freeboard acknowledging a "warn" notification
   assert.equal(res.body.state, 'armed')
   assert.equal(res.body.secondsRemaining, 60)
 })
+
+test('real-world captured payload: Freeboard acknowledging an "alert" notification resets to armed', (t) => {
+  // Second real capture, confirming the same behavior at the "alert"
+  // stage (the first ever prompt) as well as "warn" above. Also confirms
+  // again that the server's status.canSilence stays true regardless of
+  // this plugin's own canSilence: false in the raw value - see the note
+  // on the "warn" case above.
+  const { app, plugin } = setup(t)
+  const { makeFakeRouter } = require('../test-support/fake-app')
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+  t.mock.timers.tick(60_000) // -> alert
+  assert.equal(app.lastValueFor(PATH).state, 'alert')
+
+  app._emitExternalDelta(PATH, {
+    state: 'alert',
+    message: 'Dead man\u2019s switch: are you still there? Acknowledge to reset the timer.',
+    method: [],
+    timestamp: '2026-07-18T17:54:01.342Z',
+    canSilence: false,
+    id: 'bcfb9657-31b5-4bf8-9ed2-35673121c7dd',
+  })
+
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.body.state, 'armed')
+  assert.equal(res.body.secondsRemaining, 60)
+})
