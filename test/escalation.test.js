@@ -33,19 +33,13 @@ test('raises "alert" once the check-in interval elapses', (t) => {
   assert.equal(value.state, 'alert')
 })
 
-test('published notifications always have canSilence: false - silencing alone must never count as a check-in', (t) => {
-  const { app } = setup(t)
-  t.mock.timers.tick(60_000)
-  const value = app.lastValueFor('notifications.security.deadmansswitch')
-  assert.equal(value.canSilence, false)
-})
-
-test('published notifications also include a status.canSilence: false, in case a server respects a plugin-supplied status', (t) => {
+test('published notifications always have status.canSilence: false - silencing alone must never count as a check-in, and no top-level canSilence field (not a valid SignalK notification field)', (t) => {
   const { app } = setup(t)
   t.mock.timers.tick(60_000)
   const value = app.lastValueFor('notifications.security.deadmansswitch')
   assert.equal(value.status.canSilence, false)
   assert.equal(value.status.canAcknowledge, true)
+  assert.equal('canSilence' in value, false)
 })
 
 test('escalates alert -> warn -> alarm -> emergency if never acknowledged', (t) => {

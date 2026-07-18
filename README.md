@@ -124,12 +124,12 @@ or a device publishing straight to SignalK:
 - while disarmed, external changes on the path are ignored entirely -
   a disarmed switch isn't managing it
 
-Published notifications also set `canSilence: false` - silencing alone
-(muting sound without truly checking in) must never be mistaken for an
-acknowledgement - both as a top-level field and inside a `status`
-object mirroring SignalK's v2 API shape, since a server's own computed
-`status.canSilence` is normally based on `state` alone and may not
-honor the top-level field by itself.
+Published notifications also set `status.canSilence: false` (inside a
+`status` object mirroring SignalK's v2 Notifications API shape) -
+silencing alone (muting sound without truly checking in) must never be
+mistaken for an acknowledgement. There's no valid top-level
+`canSilence` field in the SignalK notification spec; only
+`status.canSilence` is meaningful.
 
 Deltas the plugin publishes itself are recognized (by source) and
 never reprocessed, so this can't create a feedback loop. The REST API

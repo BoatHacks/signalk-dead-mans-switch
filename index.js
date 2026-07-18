@@ -111,16 +111,10 @@ module.exports = function (app) {
                   // (which does properly reset the switch - see below)
                   // remains available.
                   //
-                  // SignalK's v2 Notifications API normally computes its
-                  // own `status` object (silenced/acknowledged/canSilence/
-                  // canAcknowledge/canClear) purely from `state`, ignoring
-                  // whatever a plugin publishes - so top-level canSilence
-                  // alone isn't guaranteed to reach status.canSilence. This
-                  // publishes a status object of our own too, matching the
-                  // shape the API adds, in case a given server respects an
-                  // already-present status rather than always overwriting
-                  // it - belt and braces alongside the top-level field.
-                  canSilence: false,
+                  // canSilence isn't a top-level notification field in the
+                  // SignalK spec - the real, respected one lives inside
+                  // `status`, matching the shape SignalK's v2 Notifications
+                  // API itself adds.
                   status: {
                     silenced: false,
                     acknowledged: false,
