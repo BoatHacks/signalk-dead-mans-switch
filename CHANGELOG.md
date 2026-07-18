@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Reconciles with external changes to the notification path: if another
+  plugin, webapp, or device writes an escalation state directly, the
+  switch snaps to that stage with a fresh window; clearing it (or
+  writing any non-stage state) while armed/escalated is treated as an
+  acknowledgement. Ignored entirely while disarmed. The plugin's own
+  writes are recognized by source and never reprocessed, so this can't
+  loop. REST API and webapp both reflect the reconciled state
+  immediately (webapp within its next ~1s poll).
 - REST API documented as an OpenAPI 3.0 definition (`openApi.json`),
   exposed via `plugin.getOpenApi()` per SignalK's plugin convention -
   browsable in the server Admin UI under Documentation -> OpenAPI.

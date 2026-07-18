@@ -5,12 +5,37 @@
 function makeFakeApp() {
   const messages = []
   const statuses = []
+  const busSubscribers = {} // path -> [callback, ...]
   return {
     handleMessage(pluginId, delta) {
       messages.push({ pluginId, delta })
     },
     setPluginStatus(msg) {
       statuses.push(msg)
+    },
+    streambundle: {
+      getSelfBus(path) {
+        return {
+          onValue(cb) {
+            busSubscribers[path] = busSubscribers[path] || []
+            busSubscribers[path].push(cb)
+            return () => {
+              busSubscribers[path] = (busSubscribers[path] || []).filter((fn) => fn !== cb)
+            }
+          },
+        }
+      },
+    },
+    // Test helper: simulate a delta arriving on `path` from some source
+    // other than this plugin (e.g. another plugin, or a device writing to
+    // SignalK directly). `source` defaults to a generic external plugin id
+    // so tests don't accidentally look self-originated.
+    _emitExternalDelta(path, value, source = 'some-other-plugin') {
+      const delta = { path, value, $source: source, source: { label: source } }
+      ;(busSubscribers[path] || []).forEach((cb) => cb(delta))
+    },
+    _busSubscriberCount(path) {
+      return (busSubscribers[path] || []).length
     },
     _messages: messages,
     _statuses: statuses,

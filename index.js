@@ -158,9 +158,56 @@ module.exports = function (app) {
     return Math.max(0, Math.round((deadlineAt - Date.now()) / 1000))
   }
 
+  // ---- Reacting to external changes on the notification path ---------------
+  //
+  // Something other than this plugin (another plugin, a webapp PUTting the
+  // notification directly, a hardware device publishing straight to
+  // SignalK) may write to notificationPath. When that happens, this
+  // switch's own state - and therefore what the REST API and companion
+  // webapp report - would otherwise drift out of sync with the actual
+  // notification, silently, until the next scheduled timer fires. Instead,
+  // we subscribe to the path ourselves and reconcile immediately:
+  //   - a stage value (alert/warn/alarm/emergency) written externally
+  //     snaps our state machine to that stage, exactly as if we'd
+  //     escalated to it ourselves, with a freshly-started window
+  //   - the notification being cleared, or set to any non-stage value,
+  //     while we're currently armed/escalated is treated as an external
+  //     acknowledgement - same effect as our own /ack
+  //   - while disarmed, external changes are ignored entirely - a
+  //     disarmed switch isn't managing this path, so what happens on it
+  //     is none of our business until re-armed
+  // Deltas WE published (via publishNotification/clearNotification above)
+  // come back through this same subscription like any other - they are
+  // recognized by $source being our own plugin.id and ignored, so we
+  // don't re-process our own writes or create a feedback loop.
+  let unsubscribeExternal = null
+
+  function isOwnDelta(delta) {
+    return delta && (delta.$source === plugin.id || (delta.source && delta.source.label === plugin.id))
+  }
+
+  function handleExternalNotificationChange(delta) {
+    if (isOwnDelta(delta)) return
+    if (state === 'disarmed') return
+
+    const externalState = delta && delta.value && delta.value.state
+    const stageIndex = STAGES.indexOf(externalState)
+
+    if (stageIndex !== -1) {
+      escalateTo(stageIndex)
+    } else {
+      // Cleared, or set to some state we don't recognize as one of our
+      // stages (e.g. "normal") - treat either as an acknowledgement.
+      arm()
+    }
+  }
+
   plugin.start = function (opts) {
     options = opts || {}
     notificationPath = `notifications.${config('notificationPath', 'security.deadmansswitch')}`
+    if (app.streambundle && typeof app.streambundle.getSelfBus === 'function') {
+      unsubscribeExternal = app.streambundle.getSelfBus(notificationPath).onValue(handleExternalNotificationChange)
+    }
     if (config('enabled', true)) {
       arm()
     } else {
@@ -172,6 +219,10 @@ module.exports = function (app) {
   plugin.stop = function () {
     clearTimer()
     timer = null
+    if (unsubscribeExternal) {
+      unsubscribeExternal()
+      unsubscribeExternal = null
+    }
   }
 
   plugin.schema = {

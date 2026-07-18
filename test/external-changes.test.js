@@ -1,0 +1,111 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const { makeFakeApp } = require('../test-support/fake-app')
+const buildPlugin = require('../index.js')
+
+function setup(t, opts = {}) {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const app = makeFakeApp()
+  const plugin = buildPlugin(app)
+  plugin.start({
+    checkIntervalMinutes: 1,
+    ackWindowSeconds: 30,
+    warnWindowSeconds: 20,
+    alarmWindowSeconds: 10,
+    ...opts,
+  })
+  t.after(() => plugin.stop())
+  return { app, plugin }
+}
+
+const PATH = 'notifications.security.deadmansswitch'
+
+test('subscribes to the notification path on start', (t) => {
+  const { app } = setup(t)
+  assert.equal(app._busSubscriberCount(PATH), 1)
+})
+
+test('unsubscribes on stop', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const app = makeFakeApp()
+  const plugin = buildPlugin(app)
+  plugin.start({ checkIntervalMinutes: 1, ackWindowSeconds: 30, warnWindowSeconds: 20, alarmWindowSeconds: 10 })
+  assert.equal(app._busSubscriberCount(PATH), 1)
+  plugin.stop()
+  assert.equal(app._busSubscriberCount(PATH), 0)
+})
+
+test('an external write of a stage value snaps our state machine to that stage', (t) => {
+  const { app } = setup(t)
+  // Currently just "armed" - some other plugin pushes us straight to "alarm".
+  app._emitExternalDelta(PATH, { state: 'alarm', message: 'external alarm' })
+  assert.equal(app.lastValueFor(PATH).state, 'alarm')
+})
+
+test('GET /status reflects the externally-forced stage immediately (no polling delay)', (t) => {
+  const { app, plugin } = setup(t)
+  const { makeFakeRouter } = require('../test-support/fake-app')
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+
+  app._emitExternalDelta(PATH, { state: 'warn' })
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.body.state, 'warn')
+})
+
+test('an externally-forced stage starts a fresh timer for that stage window', (t) => {
+  const { app } = setup(t)
+  app._emitExternalDelta(PATH, { state: 'warn' }) // warnWindowSeconds=20
+  const countBefore = app._messages.length
+
+  t.mock.timers.tick(19_000)
+  assert.equal(app._messages.length, countBefore, 'should not have escalated yet')
+
+  t.mock.timers.tick(1_000)
+  assert.equal(app.lastValueFor(PATH).state, 'alarm', 'should escalate to alarm after the fresh 20s window')
+})
+
+test('external clear while armed/escalated is treated as an acknowledgement', (t) => {
+  const { app } = setup(t)
+  app._emitExternalDelta(PATH, { state: 'alert' })
+  assert.equal(app.lastValueFor(PATH).state, 'alert')
+
+  app._emitExternalDelta(PATH, null)
+  assert.equal(app.lastValueFor(PATH), null, 'should be cleared, same as an ack')
+})
+
+test('external write of a non-stage state (e.g. "normal") is treated as an acknowledgement', (t) => {
+  const { app } = setup(t)
+  app._emitExternalDelta(PATH, { state: 'alarm' })
+  assert.equal(app.lastValueFor(PATH).state, 'alarm')
+
+  app._emitExternalDelta(PATH, { state: 'normal' })
+  assert.equal(app.lastValueFor(PATH), null, 'unrecognized/normal state should reset like an ack')
+})
+
+test('external changes are ignored entirely while disarmed', (t) => {
+  const { app, plugin } = setup(t)
+  const { makeFakeRouter } = require('../test-support/fake-app')
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+  router.call('post', '/disarm', {})
+  const countBefore = app._messages.length
+
+  app._emitExternalDelta(PATH, { state: 'emergency' })
+
+  assert.equal(app._messages.length, countBefore, 'no messages should be sent while disarmed')
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.body.state, 'disarmed', 'should remain disarmed, unaffected by the external write')
+})
+
+test('a delta we published ourselves is ignored (no self-triggered loop)', (t) => {
+  const { app } = setup(t)
+  const countBefore = app._messages.length
+
+  // Simulates the server echoing our own handleMessage() call back through
+  // the subscription, as it would over a real delta bus.
+  app._emitExternalDelta(PATH, { state: 'emergency' }, 'signalk-dead-mans-switch')
+
+  assert.equal(app._messages.length, countBefore, 'a self-sourced delta must not be reprocessed')
+  assert.equal(app.lastValueFor(PATH), null, 'state should be unchanged (still just armed, no notification)')
+})

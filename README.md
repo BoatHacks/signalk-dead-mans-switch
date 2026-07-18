@@ -100,6 +100,29 @@ Fully documented as an OpenAPI 3.0 definition in `openApi.json`
 convention) - browsable in the SignalK server's Admin UI under
 **Documentation -> OpenAPI** once the plugin is installed.
 
+## Interoperating with other plugins/devices
+
+The switch's state isn't only driven by its own REST API - it also
+watches the notification path itself (subscribed via
+`app.streambundle`) and reconciles immediately if something else
+writes to it directly, e.g. another plugin, a webapp doing its own PUT,
+or a device publishing straight to SignalK:
+
+- writing one of the escalation states (`alert`/`warn`/`alarm`/
+  `emergency`) snaps the switch to that stage, with a freshly-started
+  window for it - exactly as if the switch had escalated there itself
+- clearing the notification, or writing any other state (e.g.
+  `normal`), while the switch is armed or escalated is treated as an
+  external acknowledgement - same effect as calling `/ack`
+- while disarmed, external changes on the path are ignored entirely -
+  a disarmed switch isn't managing it
+
+Deltas the plugin publishes itself are recognized (by source) and
+never reprocessed, so this can't create a feedback loop. The REST API
+and companion webapp both reflect the reconciled state immediately -
+the webapp picks it up on its next poll (at most ~1s later), no
+webapp-side changes needed.
+
 ## Configuration
 
 Set via the plugin's config page in the Signal K admin UI:
