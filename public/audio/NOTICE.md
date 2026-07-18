@@ -1,16 +1,14 @@
 # Audio asset notice
 
-`emergency-siren.wav` is bundled from a user-provided file named
-`856319__loganzsound__high-frequency-siren-model-d.wav` (the numeric-ID
-+ username + description pattern strongly suggests a Freesound.org
-download, similar to the bell samples in signalk-ships-bells, but this
-could not be independently confirmed).
+`emergency-siren.wav` is "High Frequency Siren Model D" by loganzsound,
+sourced from Freesound.org.
 
-**TODO: confirm and fill in before release:**
-- Source (Freesound.org sound page URL, or wherever it actually came from)
-- License (CC0 / CC BY / CC BY-NC / other) and, if attribution-required,
-  the exact credit line to use
-- Original uploader/author name
+- Source: https://freesound.org/people/loganzsound/sounds/856319/
+- Author: loganzsound (https://www.loganzsound.com/)
+- License: Creative Commons 0 (CC0 1.0 Universal / public domain)
+  https://creativecommons.org/publicdomain/zero/1.0/
+- Original filename: `856319__loganzsound__high-frequency-siren-model-d.wav`
 
-Until this is filled in, treat the license as unconfirmed - do not publish
-this plugin to npm or cut a public release with this asset bundled.
+CC0 means no attribution is legally required, but the author is credited
+here anyway as a courtesy, consistent with the attribution notice kept for
+the bundled bell samples in signalk-ships-bells.

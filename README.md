@@ -73,9 +73,8 @@ theme - anything counts), so the siren can then start on its own later
 with no further interaction needed, as long as *something* was tapped
 at some point after the page loaded.
 
-> **License note:** the bundled siren asset's source/license is not yet
-> confirmed - see `public/audio/NOTICE.md`. Don't publish this plugin or
-> cut a release with it bundled until that's filled in.
+The bundled siren is "High Frequency Siren Model D" by loganzsound
+(Freesound.org), CC0 - see `public/audio/NOTICE.md`.
 
 ## REST API
 
