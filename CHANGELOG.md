@@ -21,6 +21,9 @@ All notable changes to this project will be documented in this file.
   loganzsound (Freesound.org), CC0 - see `public/audio/NOTICE.md`.
 
 ### Changed
+- Emergency blink is now much faster and sharper (hard flash + slight
+  scale pulse, ~3.5x/sec) instead of a slow smooth fade, for a more
+  urgent feel.
 - Emergency now blinks the whole state button (background alternates
   between two red shades), not just the outline.
 - Webapp now clearly flags a lost connection to the SignalK server: a

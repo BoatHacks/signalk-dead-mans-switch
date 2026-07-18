@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="version" content="0.6.0" />
+<meta name="version" content="0.6.1" />
 <title>Dead Man's Switch</title>
 <style>
   /* ---------- theme variables (light default, dark override) ----------
@@ -123,16 +123,18 @@
   }
   button.state-button:active { transform: scale(0.98); }
   button.state-button.blink {
-    animation: blink-button 0.9s ease-in-out infinite;
+    animation: blink-button 0.28s steps(1, end) infinite;
   }
   @keyframes blink-button {
     0%, 100% {
       background-color: var(--stage-emergency);
       border-color: var(--stage-emergency-blink);
+      transform: scale(1);
     }
     50% {
       background-color: var(--stage-emergency-blink);
       border-color: var(--stage-emergency);
+      transform: scale(1.035);
     }
   }
   .state-title { font-size: 19px; font-weight: 700; line-height: 1.3; }
