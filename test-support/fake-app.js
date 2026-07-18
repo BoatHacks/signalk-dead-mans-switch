@@ -2,13 +2,27 @@
 // function, plus a fake Express-like router for registerWithRouter tests.
 // Only the surface this plugin actually touches is implemented.
 
-function makeFakeApp() {
+function makeFakeApp({ echoSource } = {}) {
   const messages = []
   const statuses = []
   const busSubscribers = {} // path -> [callback, ...]
   return {
+    // A real SignalK server may redeliver a plugin's own handleMessage()
+    // write back through the same delta bus its subscriptions use,
+    // synchronously, before this call even returns - that's the scenario
+    // that matters most for self-echo bugs, so the fake reproduces it by
+    // default rather than only offering an opt-in simulation. `echoSource`
+    // lets a test deliberately mismatch the source string the real server
+    // would use, to prove a defense doesn't rely on that string matching.
     handleMessage(pluginId, delta) {
       messages.push({ pluginId, delta })
+      const source = echoSource !== undefined ? echoSource : pluginId
+      ;(delta.updates || []).forEach((update) => {
+        ;(update.values || []).forEach(({ path, value }) => {
+          const echoDelta = { path, value, $source: source, source: { label: source } }
+          ;(busSubscribers[path] || []).forEach((cb) => cb(echoDelta))
+        })
+      })
     },
     setPluginStatus(msg) {
       statuses.push(msg)

@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Hardened acknowledging against a self-echo reentrancy hazard: on a real
+  server, our own notification writes (during arm/ack/disarm) can be
+  redelivered back through the same subscription used to detect external
+  changes, synchronously, before the write call even returns. Previously
+  this was only filtered by matching the delta's source string against
+  our own plugin id - now guarded unconditionally by a synchronous
+  reentrancy flag as well, and `state` is updated before the notification
+  write rather than after, so acknowledging can no longer be misread as
+  an external change and reliably lands on "armed" with a full-length
+  timer - never "disarmed".
+
 ### Added
 - Reconciles with external changes to the notification path: if another
   plugin, webapp, or device writes an escalation state directly, the

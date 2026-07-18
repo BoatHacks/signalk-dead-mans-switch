@@ -109,3 +109,59 @@ test('a delta we published ourselves is ignored (no self-triggered loop)', (t) =
   assert.equal(app._messages.length, countBefore, 'a self-sourced delta must not be reprocessed')
   assert.equal(app.lastValueFor(PATH), null, 'state should be unchanged (still just armed, no notification)')
 })
+
+test('self-echo is caught by the reentrancy guard even when the source string does not match plugin.id', (t) => {
+  // A real server's self-echo $source might not exactly match our
+  // plugin.id assumption - this proves the synchronous reentrancy guard
+  // (isPublishingOwnChange) catches our own writes regardless, as a
+  // second line of defense independent of the source-string check.
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const { makeFakeApp } = require('../test-support/fake-app')
+  const app = makeFakeApp({ echoSource: 'totally-different-source-string' })
+  const plugin = buildPlugin(app)
+  plugin.start({ checkIntervalMinutes: 1, ackWindowSeconds: 30, warnWindowSeconds: 20, alarmWindowSeconds: 10 })
+  t.after(() => plugin.stop())
+
+  // Escalate normally, then acknowledge. If the mismatched-source echo of
+  // our own clearNotification() call were misread as an external ack (or
+  // worse, caused reentrant arm()/escalateTo() calls), the sequence of
+  // published values or the final state would come out wrong.
+  t.mock.timers.tick(60_000) // -> alert
+  assert.equal(app.lastValueFor(PATH).state, 'alert')
+
+  const { makeFakeRouter } = require('../test-support/fake-app')
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+  const res = router.call('post', '/ack', {})
+
+  assert.equal(res.body.ok, true)
+  assert.equal(res.body.state, 'armed', 'acknowledging must land on "armed", never "disarmed"')
+  assert.equal(res.body.secondsRemaining, 60, 'timer must be the full configured interval, not partially consumed by reentrant calls')
+  assert.equal(app.lastValueFor(PATH), null)
+})
+
+test('acknowledging from any stage always results in "armed" with a full-length timer, never "disarmed"', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const { makeFakeApp, makeFakeRouter } = require('../test-support/fake-app')
+
+  for (const stage of ['alert', 'warn', 'alarm', 'emergency']) {
+    const app = makeFakeApp()
+    const plugin = buildPlugin(app)
+    plugin.start({ checkIntervalMinutes: 1, ackWindowSeconds: 30, warnWindowSeconds: 20, alarmWindowSeconds: 10 })
+    const router = makeFakeRouter()
+    plugin.registerWithRouter(router)
+
+    const stageIndex = plugin.__test__.STAGES.indexOf(stage)
+    const windows = [30_000, 20_000, 10_000]
+    t.mock.timers.tick(60_000) // -> alert
+    for (let i = 0; i < stageIndex; i++) {
+      t.mock.timers.tick(windows[i])
+    }
+    assert.equal(app.lastValueFor(PATH).state, stage)
+
+    const res = router.call('post', '/ack', {})
+    assert.equal(res.body.state, 'armed', `ack from ${stage} must result in "armed"`)
+    assert.equal(res.body.secondsRemaining, 60, `ack from ${stage} must reset to the full configured interval`)
+    plugin.stop()
+  }
+})

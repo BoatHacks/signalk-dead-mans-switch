@@ -78,41 +78,67 @@ module.exports = function (app) {
     return `Escalated: ${state}`
   }
 
+  // Guards against a subtle reentrancy hazard: app.handleMessage() may (on
+  // a real server) redeliver our own delta back through this same
+  // subscription bus synchronously, before the call that triggered it has
+  // even returned. isOwnDelta() below is the primary defense, but it
+  // depends on matching the exact $source/source.label shape a real
+  // server gives self-originated deltas, which isn't something we can
+  // fully verify without one running. This flag is a second, unconditional
+  // defense: while true, ANY delta on our own publish/clear calls is
+  // guaranteed to be our own synchronous echo, full stop, regardless of
+  // what shape it arrives in.
+  let isPublishingOwnChange = false
+
   function publishNotification(stage) {
-    app.handleMessage(plugin.id, {
-      updates: [
-        {
-          values: [
-            {
-              path: notificationPath,
-              value: {
-                state: stage,
-                message: STAGE_MESSAGE[stage],
-                method: ['visual', 'sound'],
-                timestamp: new Date().toISOString(),
+    isPublishingOwnChange = true
+    try {
+      app.handleMessage(plugin.id, {
+        updates: [
+          {
+            values: [
+              {
+                path: notificationPath,
+                value: {
+                  state: stage,
+                  message: STAGE_MESSAGE[stage],
+                  method: ['visual', 'sound'],
+                  timestamp: new Date().toISOString(),
+                },
               },
-            },
-          ],
-        },
-      ],
-    })
+            ],
+          },
+        ],
+      })
+    } finally {
+      isPublishingOwnChange = false
+    }
   }
 
   function clearNotification() {
-    app.handleMessage(plugin.id, {
-      updates: [{ values: [{ path: notificationPath, value: null }] }],
-    })
+    isPublishingOwnChange = true
+    try {
+      app.handleMessage(plugin.id, {
+        updates: [{ values: [{ path: notificationPath, value: null }] }],
+      })
+    } finally {
+      isPublishingOwnChange = false
+    }
   }
 
-  // Arms the switch: clears any live notification, drops back to plain
-  // "armed" (no stage), and starts the check-in interval countdown.
+  // Arms the switch: drops back to plain "armed" (no stage) and starts the
+  // check-in interval countdown, then clears any live notification. `state`
+  // is updated FIRST, before the notification write - so that even in the
+  // reentrancy edge case the guard above doesn't catch, any self-echo that
+  // reaches handleExternalNotificationChange sees the already-correct new
+  // state rather than a stale one.
   function arm() {
     clearTimer()
-    clearNotification()
     state = 'armed'
     deadlineAt = Date.now() + intervalMs()
     timer = setTimeout(raisePrompt, intervalMs())
     app.setPluginStatus(statusMessage())
+    clearNotification()
   }
 
   // Fires once the check-in interval elapses: raises the first escalation
@@ -124,21 +150,24 @@ module.exports = function (app) {
   function escalateTo(stageIndex) {
     const stage = STAGES[stageIndex]
     state = stage
-    publishNotification(stage)
     app.setPluginStatus(statusMessage())
 
     clearTimer()
     if (stageIndex >= STAGES.length - 1) {
       // Emergency is terminal - no further auto-escalation, no deadline.
       deadlineAt = null
-      return
+    } else {
+      deadlineAt = Date.now() + stageWindowMs(stageIndex)
+      timer = setTimeout(() => escalateTo(stageIndex + 1), stageWindowMs(stageIndex))
     }
-    deadlineAt = Date.now() + stageWindowMs(stageIndex)
-    timer = setTimeout(() => escalateTo(stageIndex + 1), stageWindowMs(stageIndex))
+    publishNotification(stage)
   }
 
   // Acknowledges the switch, from any stage (or even while merely armed -
-  // a no-op reset in that case). Always resets to a freshly-armed timer.
+  // a no-op reset in that case). Always resets to a freshly-armed timer -
+  // this must NEVER leave the switch disarmed; disarming is a distinct,
+  // separate action (see disarm() below) that only ever happens via an
+  // explicit /disarm call, not as a side effect of acknowledging.
   function ack() {
     if (state === 'disarmed') return false
     arm()
@@ -147,10 +176,10 @@ module.exports = function (app) {
 
   function disarm() {
     clearTimer()
-    clearNotification()
     state = 'disarmed'
     deadlineAt = null
     app.setPluginStatus(statusMessage())
+    clearNotification()
   }
 
   function secondsRemaining() {
@@ -183,7 +212,7 @@ module.exports = function (app) {
   let unsubscribeExternal = null
 
   function isOwnDelta(delta) {
-    return delta && (delta.$source === plugin.id || (delta.source && delta.source.label === plugin.id))
+    return isPublishingOwnChange || (delta && (delta.$source === plugin.id || (delta.source && delta.source.label === plugin.id)))
   }
 
   function handleExternalNotificationChange(delta) {
