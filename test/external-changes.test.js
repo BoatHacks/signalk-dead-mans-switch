@@ -330,3 +330,34 @@ test('real-world captured payload: status.acknowledged becomes true on a "warn" 
   assert.equal(res.body.state, 'armed')
   assert.equal(res.body.secondsRemaining, 60)
 })
+
+test('real-world captured payload: full auto-escalation to emergency, then acknowledged in Freeboard (method loses only "sound", "visual" stays)', (t) => {
+  // Full lifecycle captured live: normal auto-escalation with no manual
+  // intervention (alert -> warn -> alarm -> emergency, same notification
+  // id throughout), then Freeboard's Acknowledge clicked at "emergency".
+  // Confirms the emergency-specific spec behavior with real data: only
+  // "sound" is stripped from method (unlike other stages, which lose
+  // both) - "visual" stays - and status.acknowledged: true is present.
+  const { app, plugin } = setup(t)
+  const { makeFakeRouter } = require('../test-support/fake-app')
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+  t.mock.timers.tick(60_000) // -> alert
+  t.mock.timers.tick(30_000) // -> warn
+  t.mock.timers.tick(20_000) // -> alarm
+  t.mock.timers.tick(10_000) // -> emergency
+  assert.equal(app.lastValueFor(PATH).state, 'emergency')
+
+  app._emitExternalDelta(PATH, {
+    state: 'emergency',
+    message: 'Dead man\u2019s switch: watch incapacitated! No acknowledgement received.',
+    method: ['visual'],
+    timestamp: '2026-07-18T19:04:24.160Z',
+    status: { silenced: false, acknowledged: true, canSilence: true, canAcknowledge: true, canClear: false },
+    id: 'cf60f229-f080-494a-8941-3a1f740006cf',
+  })
+
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.body.state, 'armed')
+  assert.equal(res.body.secondsRemaining, 60)
+})
