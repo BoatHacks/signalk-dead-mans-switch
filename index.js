@@ -5,12 +5,20 @@
 // If nobody acknowledges within `ackWindowSeconds`, the notification
 // escalates to "warn", then (after `warnWindowSeconds`) to "alarm", then
 // (after `alarmWindowSeconds`) to "emergency" - which is terminal and sits
-// there until acknowledged. An acknowledgement at ANY stage clears the
-// notification and restarts the check-in interval from zero. There is
-// deliberately no "escalate past emergency" step - emergency is the top
-// of the SignalK notification state scale, and anything past that
-// (calling for help, sounding a horn, etc.) is left to other plugins
-// subscribed to this notification path, not built into this one.
+// there until acknowledged. An acknowledgement at ANY stage resets to a
+// resting notification (state "normal", message "armed") and restarts
+// the check-in interval from zero. There is deliberately no "escalate
+// past emergency" step - emergency is the top of the SignalK notification
+// state scale, and anything past that (calling for help, sounding a horn,
+// etc.) is left to other plugins subscribed to this notification path,
+// not built into this one.
+//
+// The notification at notificationPath is never cleared - armed and
+// disarmed both keep a resting notification present (message "armed" or
+// "disarmed" respectively) so anything watching the path can always tell
+// which of those two very different states it's actually in, rather than
+// an absent value being ambiguous between them (and indistinguishable
+// from the plugin never having run at all).
 //
 // The escalation stage names double as the SignalK notification `state`
 // values (alert/warn/alarm/emergency are all valid states), which keeps
@@ -133,11 +141,41 @@ module.exports = function (app) {
     }
   }
 
-  function clearNotification() {
+  // Publishes a resting (non-escalated) notification - used for both
+  // "armed" and "disarmed", instead of clearing the path entirely. Keeping
+  // a notification present (state: normal, message reflecting which
+  // resting state we're actually in) means anything watching the path -
+  // an MFD, another plugin, a log - can always tell "the switch is armed
+  // and watching" from "the switch is disarmed" at a glance, rather than
+  // an absent value being ambiguous between those two very different
+  // things (and also indistinguishable from the plugin never having run
+  // at all).
+  function publishRestingNotification(label) {
     isPublishingOwnChange = true
     try {
       app.handleMessage(plugin.id, {
-        updates: [{ values: [{ path: notificationPath, value: null }] }],
+        updates: [
+          {
+            values: [
+              {
+                path: notificationPath,
+                value: {
+                  state: 'normal',
+                  message: label,
+                  method: [],
+                  timestamp: new Date().toISOString(),
+                  status: {
+                    silenced: false,
+                    acknowledged: false,
+                    canSilence: false,
+                    canAcknowledge: false,
+                    canClear: false,
+                  },
+                },
+              },
+            ],
+          },
+        ],
       })
     } finally {
       isPublishingOwnChange = false
@@ -145,18 +183,19 @@ module.exports = function (app) {
   }
 
   // Arms the switch: drops back to plain "armed" (no stage) and starts the
-  // check-in interval countdown, then clears any live notification. `state`
-  // is updated FIRST, before the notification write - so that even in the
-  // reentrancy edge case the guard above doesn't catch, any self-echo that
-  // reaches handleExternalNotificationChange sees the already-correct new
-  // state rather than a stale one.
+  // check-in interval countdown, then publishes a resting "armed"
+  // notification. `state` is updated FIRST, before the notification
+  // write - so that even in the reentrancy edge case the guard above
+  // doesn't catch, any self-echo that reaches
+  // handleExternalNotificationChange sees the already-correct new state
+  // rather than a stale one.
   function arm() {
     clearTimer()
     state = 'armed'
     deadlineAt = Date.now() + intervalMs()
     timer = setTimeout(raisePrompt, intervalMs())
     app.setPluginStatus(statusMessage())
-    clearNotification()
+    publishRestingNotification('armed')
   }
 
   // Fires once the check-in interval elapses: raises the first escalation
@@ -197,7 +236,7 @@ module.exports = function (app) {
     state = 'disarmed'
     deadlineAt = null
     app.setPluginStatus(statusMessage())
-    clearNotification()
+    publishRestingNotification('disarmed')
   }
 
   function secondsRemaining() {
@@ -240,10 +279,10 @@ module.exports = function (app) {
   //   - while disarmed, external changes are ignored entirely - a
   //     disarmed switch isn't managing this path, so what happens on it
   //     is none of our business until re-armed
-  // Deltas WE published (via publishNotification/clearNotification above)
-  // come back through this same subscription like any other - they are
-  // recognized (see isOwnDelta below) and ignored, so we don't re-process
-  // our own writes or create a feedback loop.
+  // Deltas WE published (via publishNotification/publishRestingNotification
+  // above) come back through this same subscription like any other - they
+  // are recognized (see isOwnDelta below) and ignored, so we don't
+  // re-process our own writes or create a feedback loop.
   let unsubscribeExternal = null
 
   function isOwnDelta(delta) {
@@ -292,15 +331,15 @@ module.exports = function (app) {
     if (config('enabled', true)) {
       arm()
     } else {
-      state = 'disarmed'
-      app.setPluginStatus(statusMessage())
-      // Matches disarm() below: a disarmed switch must never leave a
-      // notification hanging around - e.g. the server was restarted mid-
-      // escalation and this plugin now starts disabled, or was simply
-      // configured disabled with a leftover notification from a previous
-      // run/version. Clear it so nothing keeps escalating that this
-      // plugin is no longer actually managing.
-      clearNotification()
+      // Reuses disarm() itself (rather than duplicating its body) so the
+      // resting "disarmed" notification is always published consistently,
+      // including here: e.g. the server was restarted mid-escalation and
+      // this plugin now starts disabled, or was simply configured
+      // disabled with a leftover notification from a previous run/
+      // version. A disarmed switch must never leave a stale escalated
+      // notification hanging around for something it's no longer
+      // actually managing.
+      disarm()
     }
   }
 

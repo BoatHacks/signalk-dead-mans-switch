@@ -26,12 +26,18 @@ a single low-priority notification.
    plugins/automations subscribed to this notification path - keeping
    those concerns out of this plugin.)
 5. An acknowledgement at **any** stage - including while merely armed and
-   waiting - clears the notification and restarts the check-in interval
-   from zero.
+   waiting - resets to a resting notification (`state: normal`, `message:
+   "armed"`) and restarts the check-in interval from zero.
 
 The escalation stage names are exactly the SignalK notification `state`
 values (`alert`/`warn`/`alarm`/`emergency`), so any standard SignalK alarm
-display can pick this notification up with no special-casing.
+display can pick this notification up with no special-casing. The switch
+always keeps a notification present at `notificationPath` rather than
+clearing it when armed or disarmed - `message` reads `"armed"` or
+`"disarmed"` so anything watching the path can always tell which resting
+state it's actually in, rather than an absent value being ambiguous
+between "armed and watching," "disarmed," and "this plugin has never
+run."
 
 ## Acknowledging
 
@@ -91,9 +97,9 @@ All endpoints are mounted at `/plugins/signalk-dead-mans-switch`.
 | Method | Path       | Description                                              |
 | ------ | ---------- | ---------------------------------------------------------|
 | GET    | `/status`  | Current stage, seconds remaining, and active config      |
-| POST   | `/ack`     | Acknowledge - clears the notification, restarts the timer|
+| POST   | `/ack`     | Acknowledge - resets to a resting "armed" notification, restarts the timer |
 | POST   | `/arm`     | (Re-)arm the switch                                      |
-| POST   | `/disarm`  | Disarm - stops all timers, clears any live notification  |
+| POST   | `/disarm`  | Disarm - stops all timers, sets a resting "disarmed" notification |
 
 Fully documented as an OpenAPI 3.0 definition in `openApi.json`
 (exposed via `plugin.getOpenApi()`, per SignalK's plugin API

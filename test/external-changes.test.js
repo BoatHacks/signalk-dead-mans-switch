@@ -71,7 +71,9 @@ test('external clear while armed/escalated is treated as an acknowledgement', (t
   assert.equal(app.lastValueFor(PATH).state, 'alert')
 
   app._emitExternalDelta(PATH, null)
-  assert.equal(app.lastValueFor(PATH), null, 'should be cleared, same as an ack')
+  const value = app.lastValueFor(PATH)
+  assert.equal(value.state, 'normal')
+  assert.equal(value.message, 'armed', 'should reset to the resting armed notification, same as an ack')
 })
 
 test('external write of a non-stage state (e.g. "normal") is treated as an acknowledgement', (t) => {
@@ -80,7 +82,9 @@ test('external write of a non-stage state (e.g. "normal") is treated as an ackno
   assert.equal(app.lastValueFor(PATH).state, 'alarm')
 
   app._emitExternalDelta(PATH, { state: 'normal' })
-  assert.equal(app.lastValueFor(PATH), null, 'unrecognized/normal state should reset like an ack')
+  const value = app.lastValueFor(PATH)
+  assert.equal(value.state, 'normal')
+  assert.equal(value.message, 'armed', 'unrecognized/normal state should reset like an ack')
 })
 
 test('external changes are ignored entirely while disarmed', (t) => {
@@ -107,7 +111,9 @@ test('a delta we published ourselves is ignored (no self-triggered loop)', (t) =
   app._emitExternalDelta(PATH, { state: 'emergency' }, 'signalk-dead-mans-switch')
 
   assert.equal(app._messages.length, countBefore, 'a self-sourced delta must not be reprocessed')
-  assert.equal(app.lastValueFor(PATH), null, 'state should be unchanged (still just armed, no notification)')
+  const value = app.lastValueFor(PATH)
+  assert.equal(value.state, 'normal')
+  assert.equal(value.message, 'armed', 'should be unchanged (still just the resting armed notification)')
 })
 
 test('self-echo is caught by the reentrancy guard even when the source string does not match plugin.id', (t) => {
@@ -137,7 +143,9 @@ test('self-echo is caught by the reentrancy guard even when the source string do
   assert.equal(res.body.ok, true)
   assert.equal(res.body.state, 'armed', 'acknowledging must land on "armed", never "disarmed"')
   assert.equal(res.body.secondsRemaining, 60, 'timer must be the full configured interval, not partially consumed by reentrant calls')
-  assert.equal(app.lastValueFor(PATH), null)
+  const value = app.lastValueFor(PATH)
+  assert.equal(value.state, 'normal')
+  assert.equal(value.message, 'armed')
 })
 
 test('acknowledging from any stage always results in "armed" with a full-length timer, never "disarmed"', (t) => {

@@ -42,7 +42,7 @@
       "post": {
         "tags": ["Switch"],
         "summary": "Acknowledge the switch",
-        "description": "Acknowledges the switch from any stage (including while merely armed and waiting, where it's a no-op reset). Clears any active notification and restarts the check-in interval from zero. A no-op (ok: false) if the switch is currently disarmed - use POST /arm instead.",
+        "description": "Acknowledges the switch from any stage (including while merely armed and waiting, where it's a no-op reset). Resets to a resting \"armed\" notification and restarts the check-in interval from zero. A no-op (ok: false) if the switch is currently disarmed - use POST /arm instead.",
         "responses": {
           "200": {
             "description": "Acknowledgement result",
@@ -59,7 +59,7 @@
       "post": {
         "tags": ["Switch"],
         "summary": "Arm the switch",
-        "description": "(Re-)arms the switch: clears any live notification and starts the check-in interval countdown fresh.",
+        "description": "(Re-)arms the switch: sets a resting \"armed\" notification and starts the check-in interval countdown fresh.",
         "responses": {
           "200": {
             "description": "Arm result",
@@ -76,7 +76,7 @@
       "post": {
         "tags": ["Switch"],
         "summary": "Disarm the switch",
-        "description": "Stops all timers and clears any live notification. No check-ins are requested again until the switch is re-armed via POST /arm.",
+        "description": "Stops all timers and sets a resting \"disarmed\" notification. No check-ins are requested again until the switch is re-armed via POST /arm.",
         "responses": {
           "200": {
             "description": "Disarm result",

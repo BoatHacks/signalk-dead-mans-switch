@@ -4,13 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- The switch no longer clears the notification at `notificationPath`
+  when armed or disarmed - it keeps a resting notification present
+  instead (`state: "normal"`, `message: "armed"` or `"disarmed"`), so
+  anything watching the path can always tell which of those two very
+  different states it's actually in, rather than an absent value being
+  ambiguous between them (and indistinguishable from the plugin never
+  having run at all). Applies everywhere the switch reaches "armed" or
+  "disarmed": on start, via `/ack`, `/arm`, `/disarm`, and when an
+  external change is reconciled as an acknowledgement.
+
 ### Fixed
-- The switch now clears any notification whenever it becomes disarmed,
-  including when the plugin starts up already disabled (`enabled:
-  false`) - previously only the explicit `/disarm` action cleared it,
-  so a notification left over from before a server restart (e.g. the
-  plugin was mid-escalation when the server stopped) could be left
-  hanging around forever for a switch no longer managing it.
 - The switch now also trusts `status.acknowledged: true` directly as an
   acknowledgement signal, when a server's v2 Notifications API exposes
   it - the most direct, authoritative signal available. Live testing
