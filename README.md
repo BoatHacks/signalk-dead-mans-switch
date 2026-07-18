@@ -101,6 +101,16 @@ All endpoints are mounted at `/plugins/signalk-dead-mans-switch`.
 | POST   | `/arm`     | (Re-)arm the switch                                      |
 | POST   | `/disarm`  | Disarm - stops all timers, sets a resting "disarmed" notification |
 
+`POST /ack` always restarts the check-in interval, even if the switch
+is already just `armed` (nothing escalated) - handy as a general
+"I'm here" refresh via the webapp or a hardware button. It's a no-op
+only while `disarmed` (`ok: false` in the response); use `/arm` to
+start watching again. An *external* acknowledgement signal seen on the
+notification path (see below) is more conservative: it's ignored
+while already `armed`, since some servers keep an "acknowledged" flag
+sticky on the notification even after the switch resets - reacting to
+it every time would otherwise keep restarting the timer forever.
+
 Fully documented as an OpenAPI 3.0 definition in `openApi.json`
 (exposed via `plugin.getOpenApi()`, per SignalK's plugin API
 convention) - browsable in the SignalK server's Admin UI under
@@ -132,12 +142,16 @@ Either path reacts the same way to what it sees:
 - an acknowledgement via SignalK's own v2 Notifications API (`POST
   /signalk/v2/api/notifications/{id}/acknowledge`, which is what clients
   like Freeboard's "Acknowledge" button actually call) resets the switch
-  the same as calling `/ack`. That action doesn't clear the notification
-  or change `state`. When a server exposes it, `status.acknowledged:
-  true` is trusted directly - the most authoritative signal available.
-  As a fallback for servers where `status` isn't populated, the spec
-  also has the action strip `"sound"` from `method` (only `"sound"`
-  when `state` is `emergency`), so that's checked too
+  the same as calling `/ack`, but only while something is actually
+  escalated - a no-op while already just `armed`, since some servers
+  keep the "acknowledged" flag sticky on the notification even after
+  the switch resets, which would otherwise restart the timer forever.
+  That action doesn't clear the notification or change `state`. When a
+  server exposes it, `status.acknowledged: true` is trusted directly -
+  the most authoritative signal available. As a fallback for servers
+  where `status` isn't populated, the spec also has the action strip
+  `"sound"` from `method` (only `"sound"` when `state` is `emergency`),
+  so that's checked too
 - clearing the notification, or writing any other state (e.g.
   `normal`), while the switch is armed or escalated is treated as an
   external acknowledgement - same effect as calling `/ack`
