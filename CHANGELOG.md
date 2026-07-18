@@ -9,10 +9,8 @@ All notable changes to this project will be documented in this file.
   on entering the stage, then every 10s, stopping the moment the stage
   changes away from `alarm` (escalating to emergency or being
   acknowledged). Shares the same autoplay-unlock mechanism as the
-  emergency siren.
-  **Note:** this asset's (`public/audio/alarm-intercom.wav`) license is
-  not yet confirmed - see `public/audio/NOTICE.md`. Do not publish/
-  release with it bundled until that's resolved.
+  emergency siren. Sound is "Space-Intercom-Emergency" by electrobadger
+  (Freesound.org), CC0 - see `public/audio/NOTICE.md`.
 - Webapp plays a bundled siren sound, looped at full volume, the instant
   `emergency` is reached; stops the instant it's acknowledged. Includes
   an autoplay-policy "unlock" on the page's first tap/click so the siren

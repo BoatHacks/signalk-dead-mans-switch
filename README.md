@@ -77,15 +77,12 @@ The bundled siren is "High Frequency Siren Model D" by loganzsound
 (Freesound.org), CC0 - see `public/audio/NOTICE.md`.
 
 While the switch is in `alarm` (one stage before emergency), the webapp
-also plays a second bundled sound (`public/audio/alarm-intercom.wav`)
-once immediately and then again every 10 seconds, stopping the moment
-the stage changes away from `alarm` in either direction (escalating to
+also plays a second bundled sound (`public/audio/alarm-intercom.wav`,
+"Space-Intercom-Emergency" by electrobadger on Freesound.org, CC0) once
+immediately and then again every 10 seconds, stopping the moment the
+stage changes away from `alarm` in either direction (escalating to
 emergency, which has its own continuous siren instead, or being
 acknowledged).
-
-> **License note:** `alarm-intercom.wav`'s source/license is not yet
-> confirmed - see `public/audio/NOTICE.md`. Don't publish this plugin or
-> cut a release with it bundled until that's filled in.
 
 ## REST API
 
