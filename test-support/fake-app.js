@@ -5,6 +5,7 @@
 function makeFakeApp({ echoSource } = {}) {
   const messages = []
   const statuses = []
+  const debugCalls = []
   const busSubscribers = {} // path -> [callback, ...]
   return {
     // A real SignalK server may redeliver a plugin's own handleMessage()
@@ -26,6 +27,12 @@ function makeFakeApp({ echoSource } = {}) {
     },
     setPluginStatus(msg) {
       statuses.push(msg)
+    },
+    // Stand-in for SignalK's standard per-plugin debug facility - always
+    // records calls (the fake has no namespace-gating concept; tests
+    // assert on _debugCalls directly rather than on visible output).
+    debug(...args) {
+      debugCalls.push(args)
     },
     streambundle: {
       getSelfBus(path) {
@@ -53,6 +60,7 @@ function makeFakeApp({ echoSource } = {}) {
     },
     _messages: messages,
     _statuses: statuses,
+    _debugCalls: debugCalls,
     // Convenience: the last value published/cleared for a given path, or
     // undefined if nothing was ever sent for it.
     lastValueFor(path) {

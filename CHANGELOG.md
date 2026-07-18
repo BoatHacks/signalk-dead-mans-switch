@@ -5,14 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- Configurable debug logging (`Enable debug logging` in the plugin's own
-  config screen, off by default). When on, logs every state transition
-  (with the reason - a timer elapsing, an ack, an external change, etc.),
-  every notification published, and every input received (REST calls to
+- Debug logging: every state transition (with the reason - a timer
+  elapsing, an ack, an external change, etc.), every notification
+  published, and every input received (REST calls to
   `/status`/`/ack`/`/arm`/`/disarm` and external changes seen on the
-  notification path) to the server log, prefixed with the plugin id.
-  Independent of the server-wide `DEBUG` env var mechanism - this
-  toggle alone is sufficient.
+  notification path) is now logged via SignalK's standard per-plugin
+  debug facility (`app.debug()`). Switchable the same way as any other
+  plugin's debug output - the server admin UI's debug settings or the
+  `DEBUG` env var - no separate config option in this plugin.
 
 ### Changed
 - The switch no longer clears the notification at `notificationPath`

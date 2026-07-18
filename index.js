@@ -60,16 +60,15 @@ module.exports = function (app) {
     return v === undefined || v === null || v === '' ? fallback : v
   }
 
-  // Gated entirely by the plugin's own "Enable debug logging" config
-  // checkbox - deliberately NOT tied to the server-wide DEBUG env var /
-  // debug-namespace mechanism app.debug() uses, so toggling it in the
-  // plugin's own config screen is guaranteed to be sufficient on its own,
-  // with no extra server-side configuration required. Writes to
-  // console.log (captured in the server's normal log output) prefixed
-  // with the plugin id so it's easy to grep out.
+  // Routed through SignalK's standard per-plugin debug facility
+  // (app.debug()), which is what every other plugin uses - so it's
+  // switchable the standard way: via the server admin UI's "Enable
+  // debug logging" toggle for this plugin's ID / the DEBUG env var, not
+  // a bespoke config option here. app.debug() already no-ops when the
+  // plugin's namespace isn't enabled, so this can be called
+  // unconditionally.
   function debugLog(...args) {
-    if (!config('debug', false)) return
-    console.log(`[${plugin.id}]`, ...args)
+    if (typeof app.debug === 'function') app.debug(...args)
   }
 
   function intervalMs() {
@@ -434,13 +433,6 @@ module.exports = function (app) {
         title: 'Notification sub-path',
         description: 'Appended after "notifications." - e.g. "security.deadmansswitch"',
         default: 'security.deadmansswitch',
-      },
-      debug: {
-        type: 'boolean',
-        title: 'Enable debug logging',
-        description:
-          'Logs every state transition, every notification published, and every input received (REST calls and external changes on the notification path) to the server log. Off by default - noisy, intended for troubleshooting.',
-        default: false,
       },
     },
   }

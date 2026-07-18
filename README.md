@@ -157,7 +157,17 @@ Set via the plugin's config page in the Signal K admin UI:
 | Warn window                | `60` seconds                 | Time to ack before `warn` escalates to `alarm`                     |
 | Alarm window                | `60` seconds                 | Time to ack before `alarm` escalates to `emergency`                |
 | Notification sub-path      | `security.deadmansswitch`   | Appended after `notifications.`                                    |
-| Enable debug logging        | `false`                      | Logs every state transition, published notification, and received input (REST calls and external changes) to the server log. Noisy - for troubleshooting. |
+
+### Debug logging
+
+Logs every state transition (with its reason), every notification
+published, and every input received (REST calls and external changes
+on the notification path) via SignalK's standard per-plugin debug
+facility (`app.debug()`) - the same mechanism every other well-behaved
+plugin uses. Enable it the standard way: the plugin's entry in the
+server admin UI's debug log settings, or the `DEBUG` environment
+variable including `signalk-dead-mans-switch`. There's no separate
+toggle in this plugin's own config screen.
 
 ## App icon
 

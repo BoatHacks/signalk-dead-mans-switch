@@ -3,16 +3,10 @@ const assert = require('node:assert/strict')
 const { makeFakeApp, makeFakeRouter } = require('../test-support/fake-app')
 const buildPlugin = require('../index.js')
 
-// Captures console.log calls for the duration of the test via node:test's
-// built-in method mocking (auto-restored after the test), and returns the
-// captured lines as an array of strings (args joined with a space, objects
-// JSON-stringified) so assertions can just look for substrings.
-function captureConsoleLog(t) {
-  const calls = []
-  t.mock.method(console, 'log', (...args) => {
-    calls.push(args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' '))
-  })
-  return calls
+// Renders a captured app.debug(...args) call the same way console.log
+// would join it, for substring assertions.
+function render(call) {
+  return call.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')
 }
 
 function setup(t, opts = {}) {
@@ -32,92 +26,93 @@ function setup(t, opts = {}) {
 
 const PATH = 'notifications.security.deadmansswitch'
 
-test('debug logging is silent by default (debug unset)', (t) => {
-  const calls = captureConsoleLog(t)
-  setup(t)
-  t.mock.timers.tick(60_000) // -> alert, would log plenty if enabled
-  assert.equal(calls.length, 0, 'no console.log output should occur with debug unset')
+test('debug output goes through app.debug(), not a plugin-specific config option', (t) => {
+  // Debug logging is switched via SignalK's standard per-plugin facility
+  // (server admin UI / DEBUG env), not a checkbox in this plugin's own
+  // schema - so there is no "debug" property in plugin.schema at all,
+  // and app.debug() is called unconditionally (the real server's
+  // namespace gating decides whether anything is actually printed).
+  const buildPluginFresh = require('../index.js')
+  const app = makeFakeApp()
+  const plugin = buildPluginFresh(app)
+  assert.equal('debug' in (plugin.schema.properties || {}), false, 'plugin.schema should not define its own debug option')
 })
 
-test('debug: false explicitly is also silent', (t) => {
-  const calls = captureConsoleLog(t)
-  setup(t, { debug: false })
-  t.mock.timers.tick(60_000)
-  assert.equal(calls.length, 0)
-})
-
-test('debug: true logs state transitions', (t) => {
-  const calls = captureConsoleLog(t)
-  setup(t, { debug: true })
+test('app.debug() is called for state transitions, with the reason included', (t) => {
+  const { app } = setup(t)
+  app._debugCalls.length = 0 // clear startup noise
   t.mock.timers.tick(60_000) // armed -> alert
 
-  assert.ok(calls.length > 0, 'expected some debug output')
+  const lines = app._debugCalls.map(render)
   assert.ok(
-    calls.some((l) => l.includes('STATE') && l.includes('armed -> alert')),
-    `expected a state-transition log line, got: ${JSON.stringify(calls)}`
+    lines.some((l) => l.includes('STATE') && l.includes('armed -> alert')),
+    `expected a state-transition debug call, got: ${JSON.stringify(lines)}`
   )
 })
 
-test('debug logging is prefixed with the plugin id', (t) => {
-  const calls = captureConsoleLog(t)
-  setup(t, { debug: true })
-  assert.ok(calls.length > 0)
-  assert.ok(
-    calls.every((l) => l.startsWith('[signalk-dead-mans-switch]')),
-    `expected every line prefixed with the plugin id, got: ${JSON.stringify(calls.slice(0, 3))}`
-  )
-})
-
-test('debug logging captures outgoing notifications (OUTPUT)', (t) => {
-  const calls = captureConsoleLog(t)
-  setup(t, { debug: true })
+test('app.debug() captures outgoing notifications (OUTPUT)', (t) => {
+  const { app } = setup(t)
+  app._debugCalls.length = 0
   t.mock.timers.tick(60_000) // -> alert
 
+  const lines = app._debugCalls.map(render)
   assert.ok(
-    calls.some((l) => l.includes('OUTPUT notification') && l.includes('"state":"alert"')),
-    `expected an OUTPUT notification log line for alert, got: ${JSON.stringify(calls)}`
+    lines.some((l) => l.includes('OUTPUT notification') && l.includes('"state":"alert"')),
+    `expected an OUTPUT notification debug call for alert, got: ${JSON.stringify(lines)}`
   )
 })
 
-test('debug logging captures REST inputs and outputs', (t) => {
-  const { plugin } = setup(t, { debug: true })
+test('app.debug() captures REST inputs and outputs', (t) => {
+  const { app, plugin } = setup(t)
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
+  app._debugCalls.length = 0
 
-  const calls = captureConsoleLog(t) // start capturing only after registration noise
   router.call('post', '/ack', {})
 
-  assert.ok(calls.some((l) => l.includes('INPUT REST POST /ack')), `expected an input log, got: ${JSON.stringify(calls)}`)
-  assert.ok(calls.some((l) => l.includes('OUTPUT REST POST /ack')), `expected an output log, got: ${JSON.stringify(calls)}`)
+  const lines = app._debugCalls.map(render)
+  assert.ok(lines.some((l) => l.includes('INPUT REST POST /ack')), `expected an input debug call, got: ${JSON.stringify(lines)}`)
+  assert.ok(lines.some((l) => l.includes('OUTPUT REST POST /ack')), `expected an output debug call, got: ${JSON.stringify(lines)}`)
 })
 
-test('debug logging captures received external deltas (INPUT), including ones treated as an acknowledgement', (t) => {
-  const { app } = setup(t, { debug: true })
+test('app.debug() captures received external deltas (INPUT), including ones treated as an acknowledgement', (t) => {
+  const { app } = setup(t)
+  app._debugCalls.length = 0
 
-  const calls = captureConsoleLog(t) // start capturing only after startup noise
   app._emitExternalDelta(PATH, { state: 'alarm', method: ['visual', 'sound'] })
 
+  const lines = app._debugCalls.map(render)
   assert.ok(
-    calls.some((l) => l.includes('INPUT external delta')),
-    `expected an external-delta input log, got: ${JSON.stringify(calls)}`
+    lines.some((l) => l.includes('INPUT external delta')),
+    `expected an external-delta input debug call, got: ${JSON.stringify(lines)}`
   )
   assert.ok(
-    calls.some((l) => l.includes('STATE armed -> alarm') && l.includes('external stage write')),
-    `expected the resulting state transition to be logged with its reason, got: ${JSON.stringify(calls)}`
+    lines.some((l) => l.includes('STATE armed -> alarm') && l.includes('external stage write')),
+    `expected the resulting state transition to be logged with its reason, got: ${JSON.stringify(lines)}`
   )
 })
 
-test('debug logging notes when an external delta is ignored (own echo or disarmed)', (t) => {
-  const { app, plugin } = setup(t, { debug: true })
+test('app.debug() notes when an external delta is ignored (disarmed)', (t) => {
+  const { app, plugin } = setup(t)
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
   router.call('post', '/disarm', {})
 
-  const calls = captureConsoleLog(t)
+  app._debugCalls.length = 0
   app._emitExternalDelta(PATH, { state: 'emergency' })
 
+  const lines = app._debugCalls.map(render)
   assert.ok(
-    calls.some((l) => l.includes('ignored') && l.includes('disarmed')),
-    `expected a log noting the delta was ignored while disarmed, got: ${JSON.stringify(calls)}`
+    lines.some((l) => l.includes('ignored') && l.includes('disarmed')),
+    `expected a debug call noting the delta was ignored while disarmed, got: ${JSON.stringify(lines)}`
   )
+})
+
+test('does not throw if app.debug is not provided by the host (older server or minimal test double)', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const app = makeFakeApp()
+  delete app.debug
+  const plugin = buildPlugin(app)
+  assert.doesNotThrow(() => plugin.start({ checkIntervalMinutes: 1 }))
+  t.after(() => plugin.stop())
 })
