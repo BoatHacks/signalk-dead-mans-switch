@@ -60,6 +60,18 @@ module.exports = function (app) {
     return v === undefined || v === null || v === '' ? fallback : v
   }
 
+  // Gated entirely by the plugin's own "Enable debug logging" config
+  // checkbox - deliberately NOT tied to the server-wide DEBUG env var /
+  // debug-namespace mechanism app.debug() uses, so toggling it in the
+  // plugin's own config screen is guaranteed to be sufficient on its own,
+  // with no extra server-side configuration required. Writes to
+  // console.log (captured in the server's normal log output) prefixed
+  // with the plugin id so it's easy to grep out.
+  function debugLog(...args) {
+    if (!config('debug', false)) return
+    console.log(`[${plugin.id}]`, ...args)
+  }
+
   function intervalMs() {
     return config('checkIntervalMinutes', 15) * 60 * 1000
   }
@@ -99,6 +111,11 @@ module.exports = function (app) {
   let isPublishingOwnChange = false
 
   function publishNotification(stage) {
+    debugLog(`OUTPUT notification -> ${notificationPath}:`, {
+      state: stage,
+      message: STAGE_MESSAGE[stage],
+      method: ['visual', 'sound'],
+    })
     isPublishingOwnChange = true
     try {
       app.handleMessage(plugin.id, {
@@ -151,6 +168,7 @@ module.exports = function (app) {
   // things (and also indistinguishable from the plugin never having run
   // at all).
   function publishRestingNotification(label) {
+    debugLog(`OUTPUT notification -> ${notificationPath}:`, { state: 'normal', message: label })
     isPublishingOwnChange = true
     try {
       app.handleMessage(plugin.id, {
@@ -189,11 +207,13 @@ module.exports = function (app) {
   // doesn't catch, any self-echo that reaches
   // handleExternalNotificationChange sees the already-correct new state
   // rather than a stale one.
-  function arm() {
+  function arm(reason) {
+    const previousState = state
     clearTimer()
     state = 'armed'
     deadlineAt = Date.now() + intervalMs()
     timer = setTimeout(raisePrompt, intervalMs())
+    debugLog(`STATE ${previousState} -> armed (${reason || 'unspecified'}); next check-in in ${intervalMs() / 1000}s`)
     app.setPluginStatus(statusMessage())
     publishRestingNotification('armed')
   }
@@ -201,22 +221,25 @@ module.exports = function (app) {
   // Fires once the check-in interval elapses: raises the first escalation
   // stage ("alert") and starts its own timeout.
   function raisePrompt() {
-    escalateTo(0)
+    escalateTo(0, 'check-in interval elapsed')
   }
 
-  function escalateTo(stageIndex) {
+  function escalateTo(stageIndex, reason) {
+    const previousState = state
     const stage = STAGES[stageIndex]
     state = stage
-    app.setPluginStatus(statusMessage())
 
     clearTimer()
     if (stageIndex >= STAGES.length - 1) {
       // Emergency is terminal - no further auto-escalation, no deadline.
       deadlineAt = null
+      debugLog(`STATE ${previousState} -> ${stage} (${reason || 'unspecified'}); terminal, no further auto-escalation`)
     } else {
       deadlineAt = Date.now() + stageWindowMs(stageIndex)
-      timer = setTimeout(() => escalateTo(stageIndex + 1), stageWindowMs(stageIndex))
+      timer = setTimeout(() => escalateTo(stageIndex + 1, 'stage window elapsed'), stageWindowMs(stageIndex))
+      debugLog(`STATE ${previousState} -> ${stage} (${reason || 'unspecified'}); escalates further in ${stageWindowMs(stageIndex) / 1000}s unless acknowledged`)
     }
+    app.setPluginStatus(statusMessage())
     publishNotification(stage)
   }
 
@@ -225,16 +248,21 @@ module.exports = function (app) {
   // this must NEVER leave the switch disarmed; disarming is a distinct,
   // separate action (see disarm() below) that only ever happens via an
   // explicit /disarm call, not as a side effect of acknowledging.
-  function ack() {
-    if (state === 'disarmed') return false
-    arm()
+  function ack(reason) {
+    if (state === 'disarmed') {
+      debugLog(`INPUT ack (${reason || 'unspecified'}) - no-op, switch is disarmed`)
+      return false
+    }
+    arm(reason || 'ack')
     return true
   }
 
-  function disarm() {
+  function disarm(reason) {
+    const previousState = state
     clearTimer()
     state = 'disarmed'
     deadlineAt = null
+    debugLog(`STATE ${previousState} -> disarmed (${reason || 'unspecified'})`)
     app.setPluginStatus(statusMessage())
     publishRestingNotification('disarmed')
   }
@@ -290,10 +318,17 @@ module.exports = function (app) {
   }
 
   function handleExternalNotificationChange(delta) {
-    if (isOwnDelta(delta)) return
-    if (state === 'disarmed') return
-
+    if (isOwnDelta(delta)) {
+      debugLog('INPUT external delta on notification path - own echo, ignored')
+      return
+    }
     const value = delta && delta.value
+    debugLog('INPUT external delta on notification path:', value)
+    if (state === 'disarmed') {
+      debugLog('  -> ignored, switch is disarmed')
+      return
+    }
+
     const externalState = value && value.state
     const method = value && value.method
     const status = value && value.status
@@ -307,29 +342,38 @@ module.exports = function (app) {
     const acknowledgedViaMethod = Array.isArray(method) && !method.includes('sound')
 
     if (acknowledgedViaStatus || acknowledgedViaMethod) {
-      arm()
+      arm(acknowledgedViaStatus ? 'external ack: status.acknowledged' : 'external ack: method no longer includes sound')
       return
     }
 
     const stageIndex = STAGES.indexOf(externalState)
 
     if (stageIndex !== -1) {
-      escalateTo(stageIndex)
+      escalateTo(stageIndex, 'external stage write')
     } else {
       // Cleared, or set to some state we don't recognize as one of our
       // stages (e.g. "normal") - treat either as an acknowledgement.
-      arm()
+      arm('external ack: cleared or non-stage state')
     }
   }
 
   plugin.start = function (opts) {
     options = opts || {}
     notificationPath = `notifications.${config('notificationPath', 'security.deadmansswitch')}`
+    debugLog('plugin.start()', {
+      notificationPath,
+      enabled: config('enabled', true),
+      checkIntervalMinutes: config('checkIntervalMinutes', 15),
+      ackWindowSeconds: config('ackWindowSeconds', 90),
+      warnWindowSeconds: config('warnWindowSeconds', 60),
+      alarmWindowSeconds: config('alarmWindowSeconds', 60),
+    })
     if (app.streambundle && typeof app.streambundle.getSelfBus === 'function') {
       unsubscribeExternal = app.streambundle.getSelfBus(notificationPath).onValue(handleExternalNotificationChange)
+      debugLog(`subscribed to external changes on ${notificationPath}`)
     }
     if (config('enabled', true)) {
-      arm()
+      arm('start (enabled)')
     } else {
       // Reuses disarm() itself (rather than duplicating its body) so the
       // resting "disarmed" notification is always published consistently,
@@ -339,11 +383,12 @@ module.exports = function (app) {
       // version. A disarmed switch must never leave a stale escalated
       // notification hanging around for something it's no longer
       // actually managing.
-      disarm()
+      disarm('start (enabled: false)')
     }
   }
 
   plugin.stop = function () {
+    debugLog('plugin.stop()')
     clearTimer()
     timer = null
     if (unsubscribeExternal) {
@@ -390,6 +435,13 @@ module.exports = function (app) {
         description: 'Appended after "notifications." - e.g. "security.deadmansswitch"',
         default: 'security.deadmansswitch',
       },
+      debug: {
+        type: 'boolean',
+        title: 'Enable debug logging',
+        description:
+          'Logs every state transition, every notification published, and every input received (REST calls and external changes on the notification path) to the server log. Off by default - noisy, intended for troubleshooting.',
+        default: false,
+      },
     },
   }
 
@@ -412,7 +464,8 @@ module.exports = function (app) {
     }
 
     router.get('/status', (req, res) => {
-      res.json({
+      debugLog('INPUT REST GET /status')
+      const body = {
         state,
         secondsRemaining: secondsRemaining(),
         deadlineAt,
@@ -423,22 +476,33 @@ module.exports = function (app) {
           warnWindowSeconds: config('warnWindowSeconds', 60),
           alarmWindowSeconds: config('alarmWindowSeconds', 60),
         },
-      })
+      }
+      debugLog('OUTPUT REST GET /status ->', { state: body.state, secondsRemaining: body.secondsRemaining })
+      res.json(body)
     })
 
     router.post('/ack', (req, res) => {
-      const acked = ack()
-      res.json({ ok: acked, state, secondsRemaining: secondsRemaining() })
+      debugLog('INPUT REST POST /ack')
+      const acked = ack('REST /ack')
+      const body = { ok: acked, state, secondsRemaining: secondsRemaining() }
+      debugLog('OUTPUT REST POST /ack ->', body)
+      res.json(body)
     })
 
     router.post('/disarm', (req, res) => {
-      disarm()
-      res.json({ ok: true, state })
+      debugLog('INPUT REST POST /disarm')
+      disarm('REST /disarm')
+      const body = { ok: true, state }
+      debugLog('OUTPUT REST POST /disarm ->', body)
+      res.json(body)
     })
 
     router.post('/arm', (req, res) => {
-      arm()
-      res.json({ ok: true, state, secondsRemaining: secondsRemaining() })
+      debugLog('INPUT REST POST /arm')
+      arm('REST /arm')
+      const body = { ok: true, state, secondsRemaining: secondsRemaining() }
+      debugLog('OUTPUT REST POST /arm ->', body)
+      res.json(body)
     })
   }
 

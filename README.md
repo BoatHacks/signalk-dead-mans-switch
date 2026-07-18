@@ -157,6 +157,7 @@ Set via the plugin's config page in the Signal K admin UI:
 | Warn window                | `60` seconds                 | Time to ack before `warn` escalates to `alarm`                     |
 | Alarm window                | `60` seconds                 | Time to ack before `alarm` escalates to `emergency`                |
 | Notification sub-path      | `security.deadmansswitch`   | Appended after `notifications.`                                    |
+| Enable debug logging        | `false`                      | Logs every state transition, published notification, and received input (REST calls and external changes) to the server log. Noisy - for troubleshooting. |
 
 ## App icon
 
