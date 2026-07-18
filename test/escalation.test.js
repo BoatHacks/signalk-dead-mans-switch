@@ -128,9 +128,29 @@ test('honors a custom notificationPath', (t) => {
   assert.equal(app.lastValueFor('notifications.navigation.watchAlive').state, 'alert')
 })
 
-test('respects enabled: false on start (does not arm)', (t) => {
+test('respects enabled: false on start (does not arm), and clears any stale notification', (t) => {
   const { app } = setup(t, { enabled: false })
   t.mock.timers.tick(10 * 60_000)
-  assert.equal(app.lastValueFor('notifications.security.deadmansswitch'), undefined)
+  assert.equal(app.lastValueFor('notifications.security.deadmansswitch'), null)
   assert.equal(app._statuses[app._statuses.length - 1], 'Disarmed')
+})
+
+test('a stale escalated notification left over from before a restart is cleared when starting disabled', (t) => {
+  // Simulates the actual scenario the fix targets: the plugin was mid-
+  // escalation when the server restarted, and now starts up disabled
+  // (e.g. reconfigured, or the config was already set that way) - the
+  // leftover notification must not be left hanging around forever for
+  // a switch that is no longer managing it.
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const app = makeFakeApp()
+  app.handleMessage('some-other-source', {
+    updates: [{ values: [{ path: 'notifications.security.deadmansswitch', value: { state: 'alarm' } }] }],
+  })
+  assert.equal(app.lastValueFor('notifications.security.deadmansswitch').state, 'alarm')
+
+  const plugin = buildPlugin(app)
+  plugin.start({ enabled: false })
+  t.after(() => plugin.stop())
+
+  assert.equal(app.lastValueFor('notifications.security.deadmansswitch'), null)
 })

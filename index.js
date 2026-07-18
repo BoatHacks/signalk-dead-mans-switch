@@ -294,6 +294,13 @@ module.exports = function (app) {
     } else {
       state = 'disarmed'
       app.setPluginStatus(statusMessage())
+      // Matches disarm() below: a disarmed switch must never leave a
+      // notification hanging around - e.g. the server was restarted mid-
+      // escalation and this plugin now starts disabled, or was simply
+      // configured disabled with a leftover notification from a previous
+      // run/version. Clear it so nothing keeps escalating that this
+      // plugin is no longer actually managing.
+      clearNotification()
     }
   }
 
