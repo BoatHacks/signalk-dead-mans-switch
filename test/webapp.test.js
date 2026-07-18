@@ -426,6 +426,16 @@ test('emergency shows a much larger "TAP HERE" call to action instead of the usu
   assert.ok(cta.classList.contains('emergency-cta'))
 })
 
+test('daylight escalation colors: alert light yellow, warn bright yellow, alarm/emergency fire-engine red, emergency has a thick yellow outline', () => {
+  const html = fs.readFileSync(INDEX_HTML, 'utf8')
+  assert.match(html, /--stage-alert:\s*#fff176/)
+  assert.match(html, /--stage-warn:\s*#ffe600/)
+  assert.match(html, /--stage-alarm:\s*#ce2029/)
+  assert.match(html, /--stage-emergency:\s*#ce2029/)
+  assert.match(html, /--stage-emergency-outline:\s*#ffd500/)
+  assert.match(html, /border-width:\s*6px/)
+})
+
 test('BASE is a fixed absolute /plugins/<id> path, not derived from window.location', () => {
   const html = fs.readFileSync(INDEX_HTML, 'utf8')
   assert.match(html, /const BASE = '\/plugins\/signalk-dead-mans-switch'/)

@@ -19,6 +19,12 @@ All notable changes to this project will be documented in this file.
   loganzsound (Freesound.org), CC0 - see `public/audio/NOTICE.md`.
 
 ### Changed
+- Daylight (light theme) escalation colors: alert is light yellow, warn
+  is bright yellow, alarm and emergency are fire-engine red; emergency
+  additionally gets a thick, constant yellow outline while the
+  background blinks. Alert/warn switched to dark text for readability
+  against their new light backgrounds. Dark theme is intentionally
+  unchanged (stays within its red-shifted night-vision palette).
 - Emergency's call-to-action text is now "TAP HERE" in much larger,
   bolder letters instead of the usual "Tap to acknowledge".
 - Emergency blink is now much faster and sharper (hard flash + slight

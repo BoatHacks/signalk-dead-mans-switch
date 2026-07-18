@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="version" content="0.6.2" />
+<meta name="version" content="0.7.0" />
 <title>Dead Man's Switch</title>
 <style>
   /* ---------- theme variables (light default, dark override) ----------
@@ -30,11 +30,16 @@
 
     --stage-disarmed: #9a9a94;
     --stage-armed: #2f6f2f;
-    --stage-alert: #c98a1f;
-    --stage-warn: #e0b91a;
-    --stage-alarm: #c23b32;
-    --stage-emergency: #b91f1f;
-    --stage-emergency-blink: #ff4136;
+    --stage-alert: #fff176;
+    --stage-warn: #ffe600;
+    --stage-alarm: #ce2029;
+    --stage-emergency: #ce2029;
+    --stage-emergency-blink: #8c1116;
+    --stage-emergency-outline: #ffd500;
+    /* alert/warn are pale/bright yellow - white text (the default for
+       every other stage) would be unreadable on them, so those two
+       stages use dark text instead. */
+    --state-text-pale: #1a1a15;
   }
 
   [data-theme="dark"] {
@@ -56,6 +61,11 @@
     --stage-alarm: #e0574a;
     --stage-emergency: #e0574a;
     --stage-emergency-blink: #ff5c47;
+    /* Deliberately NOT yellow here - the daylight yellow outline would
+       reintroduce a non-red hue into the red-shifted night palette and
+       defeat the point of it. Stays within the red family instead. */
+    --stage-emergency-outline: #ff5c47;
+    --state-text-pale: var(--on-accent-text);
   }
 
   * { box-sizing: border-box; }
@@ -123,17 +133,17 @@
   }
   button.state-button:active { transform: scale(0.98); }
   button.state-button.blink {
+    border-width: 6px;
+    border-color: var(--stage-emergency-outline);
     animation: blink-button 0.28s steps(1, end) infinite;
   }
   @keyframes blink-button {
     0%, 100% {
       background-color: var(--stage-emergency);
-      border-color: var(--stage-emergency-blink);
       transform: scale(1);
     }
     50% {
       background-color: var(--stage-emergency-blink);
-      border-color: var(--stage-emergency);
       transform: scale(1.035);
     }
   }
@@ -213,6 +223,13 @@ const ACK_LABEL = {
 
 function stageColorVar(stage) {
   return `var(--stage-${stage || 'disarmed'})`
+}
+
+// alert/warn are pale/bright yellow backgrounds - the white text used for
+// every other stage would be unreadable on them, so those two get dark
+// text instead.
+function stageTextColorVar(stage) {
+  return stage === 'alert' || stage === 'warn' ? 'var(--state-text-pale)' : 'var(--on-accent-text)'
 }
 
 // Total duration (seconds) of whatever window the current stage is
@@ -448,6 +465,7 @@ function App() {
 
   const stage = status.state
   const color = stageColorVar(stage)
+  const textColor = stageTextColorVar(stage)
   const totalSeconds = stageTotalSeconds(stage, status.config || {})
   const remaining = status.secondsRemaining
   // "Fill" direction: the bar starts empty and fills up as time elapses
@@ -481,7 +499,7 @@ function App() {
 
       <button
         class=${`state-button ${stage === 'emergency' ? 'blink' : ''} ${connectionError ? 'stale' : ''}`}
-        style=${{ background: color }}
+        style=${{ background: color, color: textColor }}
         onClick=${handleStateButton}
       >
         <span class="state-title">${STAGE_TITLE[stage] || stage}</span>
