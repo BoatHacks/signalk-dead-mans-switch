@@ -4,11 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed
-- Emergency now blinks the whole state button (background alternates
-  between two red shades), not just the outline.
-
 ### Added
+- Webapp plays a second bundled sound while in `alarm`: once immediately
+  on entering the stage, then every 10s, stopping the moment the stage
+  changes away from `alarm` (escalating to emergency or being
+  acknowledged). Shares the same autoplay-unlock mechanism as the
+  emergency siren.
+  **Note:** this asset's (`public/audio/alarm-intercom.wav`) license is
+  not yet confirmed - see `public/audio/NOTICE.md`. Do not publish/
+  release with it bundled until that's resolved.
 - Webapp plays a bundled siren sound, looped at full volume, the instant
   `emergency` is reached; stops the instant it's acknowledged. Includes
   an autoplay-policy "unlock" on the page's first tap/click so the siren
@@ -17,6 +21,8 @@ All notable changes to this project will be documented in this file.
   loganzsound (Freesound.org), CC0 - see `public/audio/NOTICE.md`.
 
 ### Changed
+- Emergency now blinks the whole state button (background alternates
+  between two red shades), not just the outline.
 - Webapp now clearly flags a lost connection to the SignalK server: a
   prominent banner appears, the state button and progress bar are dimmed
   to mark the data as stale, and the last known state (with a timestamp)

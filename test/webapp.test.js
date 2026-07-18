@@ -345,6 +345,76 @@ test('stops the siren once emergency is acknowledged', async (t) => {
   assert.ok(dom.window.__audioCalls.pause > 0, 'siren should have been paused after acknowledging')
 })
 
+test('alarm audio element points at the bundled alarm-intercom file', async (t) => {
+  const html = fs.readFileSync(INDEX_HTML, 'utf8')
+  assert.match(html, /<audio ref=\$\{alarmAudioRef\} src="\.\/audio\/alarm-intercom\.wav"/)
+})
+
+test('plays the alarm sound immediately on entering alarm, then again every 10s, and stops on leaving alarm', async (t) => {
+  const fetchImpl = await statusFetch('alarm', 55, DEFAULT_CONFIG)
+  const { dom, doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+  await new Promise((resolve) => setTimeout(resolve, 100))
+
+  assert.equal(dom.window.__audioCalls.play, 1, 'should play once immediately on entering alarm')
+
+  // Advance past the first 10s repeat.
+  await new Promise((resolve) => setTimeout(resolve, 10100))
+  assert.equal(dom.window.__audioCalls.play, 2, 'should replay after 10s while still in alarm')
+
+  await new Promise((resolve) => setTimeout(resolve, 10100))
+  assert.equal(dom.window.__audioCalls.play, 3, 'should keep replaying every 10s while still in alarm')
+})
+
+test('does not play the alarm sound for non-alarm stages', async (t) => {
+  const fetchImpl = await statusFetch('warn', 20, DEFAULT_CONFIG)
+  const { dom, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+  await new Promise((resolve) => setTimeout(resolve, 100))
+
+  assert.equal(dom.window.__audioCalls.play, 0, 'alarm sound should not play outside the alarm stage')
+})
+
+test('stops repeating the alarm sound once acknowledged out of alarm', async (t) => {
+  let state = 'alarm'
+  const fetchImpl = async (url) => {
+    if (String(url).endsWith('/status')) {
+      return {
+        ok: true,
+        status: 200,
+        url,
+        json: async () => ({
+          state,
+          secondsRemaining: state === 'alarm' ? 55 : 900,
+          deadlineAt: Date.now() + 55000,
+          notificationPath: 'notifications.security.deadmansswitch',
+          config: DEFAULT_CONFIG,
+        }),
+      }
+    }
+    if (String(url).endsWith('/ack')) {
+      state = 'armed'
+    }
+    return { ok: true, status: 200, url, json: async () => ({ ok: true }) }
+  }
+
+  const { dom, doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  assert.equal(dom.window.__audioCalls.play, 1)
+
+  doc.querySelector('button.state-button').dispatchEvent(new Event('click', { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 100))
+
+  const countAfterAck = dom.window.__audioCalls.play
+  await new Promise((resolve) => setTimeout(resolve, 10100))
+  assert.equal(
+    dom.window.__audioCalls.play,
+    countAfterAck,
+    'no further alarm replays after leaving the alarm stage'
+  )
+})
+
 test('BASE is a fixed absolute /plugins/<id> path, not derived from window.location', () => {
   const html = fs.readFileSync(INDEX_HTML, 'utf8')
   assert.match(html, /const BASE = '\/plugins\/signalk-dead-mans-switch'/)

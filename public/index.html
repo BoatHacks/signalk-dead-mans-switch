@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="version" content="0.5.1" />
+<meta name="version" content="0.6.0" />
 <title>Dead Man's Switch</title>
 <style>
   /* ---------- theme variables (light default, dark override) ----------
@@ -272,20 +272,21 @@ function App() {
   const [theme, setTheme] = useState(getPreferredTheme())
   const pollRef = useRef(null)
   const audioRef = useRef(null)
+  const alarmAudioRef = useRef(null)
+  const alarmIntervalRef = useRef(null)
 
   // Browsers block audio.play() from firing with sound until the page has
   // seen at least one real user gesture (autoplay policy). We can't
-  // guarantee anyone will tap anything before emergency actually hits, so
-  // instead we "unlock" the audio element on the very first tap/click
-  // anywhere on the page (arming, acking, toggling the theme - anything
-  // counts) by playing-then-immediately-pausing it. That one real gesture
-  // satisfies the browser's policy for every future programmatic play()
-  // call on this same element for the rest of the page's life, so the
-  // siren can then start on its own once emergency is reached with no
+  // guarantee anyone will tap anything before emergency/alarm actually
+  // hits, so instead we "unlock" both audio elements on the very first
+  // tap/click anywhere on the page (arming, acking, toggling the theme -
+  // anything counts) by playing-then-immediately-pausing them. That one
+  // real gesture satisfies the browser's policy for every future
+  // programmatic play() call on these same elements for the rest of the
+  // page's life, so they can then start on their own later with no
   // further interaction needed.
   useEffect(() => {
-    function unlock() {
-      const el = audioRef.current
+    function unlockOne(el) {
       if (!el) return
       el.play()
         .then(() => {
@@ -296,6 +297,10 @@ function App() {
           // Autoplay still blocked (e.g. no gesture actually registered) -
           // next tap will just try again.
         })
+    }
+    function unlock() {
+      unlockOne(audioRef.current)
+      unlockOne(alarmAudioRef.current)
       window.removeEventListener('pointerdown', unlock)
     }
     window.addEventListener('pointerdown', unlock)
@@ -320,6 +325,38 @@ function App() {
     } else {
       el.pause()
       el.currentTime = 0
+    }
+  }, [status && status.state])
+
+  // Replay the alarm sound every 10s for exactly as long as the switch is
+  // in "alarm" - once immediately on entering the stage, then on a
+  // repeating timer, stopping (and clearing the timer) the moment the
+  // stage changes away from "alarm" in either direction (escalating to
+  // emergency, which has its own continuous siren instead, or being
+  // acknowledged).
+  useEffect(() => {
+    if (alarmIntervalRef.current) {
+      clearInterval(alarmIntervalRef.current)
+      alarmIntervalRef.current = null
+    }
+    if (status && status.state === 'alarm') {
+      const playOnce = () => {
+        const el = alarmAudioRef.current
+        if (!el) return
+        el.currentTime = 0
+        el.play().catch(() => {
+          // Blocked by autoplay policy - the pointerdown unlock handler
+          // will catch the next tap, and the next 10s tick retries.
+        })
+      }
+      playOnce()
+      alarmIntervalRef.current = setInterval(playOnce, 10000)
+    }
+    return () => {
+      if (alarmIntervalRef.current) {
+        clearInterval(alarmIntervalRef.current)
+        alarmIntervalRef.current = null
+      }
     }
   }, [status && status.state])
 
@@ -393,6 +430,7 @@ function App() {
   if (!status) {
     return html`
       <audio ref=${audioRef} src="./audio/emergency-siren.wav" preload="auto"></audio>
+      <audio ref=${alarmAudioRef} src="./audio/alarm-intercom.wav" preload="auto"></audio>
       <div class="toolbar"><${ThemeToggle} theme=${theme} setTheme=${setTheme} /></div>
       <main>
         ${connectionError
@@ -422,6 +460,7 @@ function App() {
 
   return html`
     <audio ref=${audioRef} src="./audio/emergency-siren.wav" preload="auto"></audio>
+    <audio ref=${alarmAudioRef} src="./audio/alarm-intercom.wav" preload="auto"></audio>
     <div class="toolbar">
       ${stage !== 'disarmed' &&
       html`<button type="button" class="icon-btn disarm-btn" onClick=${handleDisarm}>Disarm</button>`}
