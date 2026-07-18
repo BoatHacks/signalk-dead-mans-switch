@@ -47,7 +47,7 @@ test('the merged state button shows both the stage and remaining time while arme
 
   const stateBtn = doc.querySelector('button.state-button')
   assert.ok(stateBtn, 'state-button should be present')
-  assert.match(stateBtn.textContent, /Armed/)
+  assert.match(stateBtn.textContent, /ARMED/)
   assert.match(stateBtn.textContent, /12m 34s remaining/)
 })
 
@@ -57,7 +57,7 @@ test('the merged state button shows remaining time while escalated too', async (
   t.after(unmount)
 
   const stateBtn = doc.querySelector('button.state-button')
-  assert.match(stateBtn.textContent, /Alert/)
+  assert.match(stateBtn.textContent, /ALERT/)
   assert.match(stateBtn.textContent, /42s remaining/)
 })
 
@@ -259,7 +259,7 @@ test('a failed status fetch shows a clear connection-lost banner and dims the st
 
   // First poll succeeded - no banner yet, last known stage visible.
   assert.ok(!doc.querySelector('.connection-banner'))
-  assert.match(doc.querySelector('button.state-button').textContent, /Warn/)
+  assert.match(doc.querySelector('button.state-button').textContent, /WARNING/)
 
   // Now the connection drops; wait for the 1s poll to pick it up.
   fail = true
@@ -270,7 +270,7 @@ test('a failed status fetch shows a clear connection-lost banner and dims the st
   assert.match(banner.textContent, /lost/i)
   // The last known state must still be visible, just flagged as stale.
   const stateBtn = doc.querySelector('button.state-button')
-  assert.match(stateBtn.textContent, /Warn/)
+  assert.match(stateBtn.textContent, /WARNING/)
   assert.ok(stateBtn.classList.contains('stale'))
   assert.ok(doc.querySelector('.progress-track').classList.contains('stale'))
 })
