@@ -450,12 +450,13 @@ test('package.json declares the SignalK app icon for the admin UI app list', () 
   assert.equal(pkg.signalk && pkg.signalk.appIcon, './assets/icons/icon-512.png')
 })
 
-test('package.json declares app-store screenshots for armed/warn/emergency, and the files exist at 640x480', () => {
+test('package.json declares app-store screenshots for armed/armed-dark/warn/emergency, and the files exist at 640x480', () => {
   const repoRoot = path.join(PUBLIC_DIR, '..')
   const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))
   const screenshots = (pkg.signalk && pkg.signalk.screenshots) || []
   assert.deepEqual(screenshots, [
     './docs/screenshots/armed.png',
+    './docs/screenshots/armed-dark.png',
     './docs/screenshots/warn.png',
     './docs/screenshots/emergency.png',
   ])

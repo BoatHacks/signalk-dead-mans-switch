@@ -5,8 +5,9 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- App-store screenshots (640x480) for the armed, warn, and emergency
-  states, wired up via `package.json`'s `signalk.screenshots`.
+- App-store screenshots (640x480) for the armed (light and dark theme),
+  warn, and emergency states, wired up via `package.json`'s
+  `signalk.screenshots`.
 - App icon/favicon (`public/assets/icons/icon-512.png`), wired up as the
   browser favicon and as the SignalK admin UI app-list icon
   (`package.json`'s `signalk.appIcon`). Not used anywhere inside the

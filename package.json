@@ -18,6 +18,7 @@
     "appIcon": "./assets/icons/icon-512.png",
     "screenshots": [
       "./docs/screenshots/armed.png",
+      "./docs/screenshots/armed-dark.png",
       "./docs/screenshots/warn.png",
       "./docs/screenshots/emergency.png"
     ]
