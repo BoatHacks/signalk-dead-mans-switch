@@ -59,6 +59,24 @@ it's obvious the display can no longer be trusted, without losing the
 last real information either. Polling continues in the background and
 the banner clears automatically once the connection recovers.
 
+## Siren
+
+The moment the switch reaches `emergency`, the webapp plays a bundled
+siren sound (`public/audio/emergency-siren.wav`), looped, at full volume
+(the audio element's own gain - it can't override the device's system/
+OS volume). It stops the instant `emergency` is acknowledged.
+
+Browsers block audio from starting with sound until the page has seen a
+real user gesture. The webapp "unlocks" the audio element on the very
+first tap/click anywhere on the page (arming, acking, toggling the
+theme - anything counts), so the siren can then start on its own later
+with no further interaction needed, as long as *something* was tapped
+at some point after the page loaded.
+
+> **License note:** the bundled siren asset's source/license is not yet
+> confirmed - see `public/audio/NOTICE.md`. Don't publish this plugin or
+> cut a release with it bundled until that's filled in.
+
 ## REST API
 
 All endpoints are mounted at `/plugins/signalk-dead-mans-switch`.

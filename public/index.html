@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="version" content="0.4.2" />
+<meta name="version" content="0.5.0" />
 <title>Dead Man's Switch</title>
 <style>
   /* ---------- theme variables (light default, dark override) ----------
@@ -265,6 +265,57 @@ function App() {
   const [lastGoodAt, setLastGoodAt] = useState(null)
   const [theme, setTheme] = useState(getPreferredTheme())
   const pollRef = useRef(null)
+  const audioRef = useRef(null)
+
+  // Browsers block audio.play() from firing with sound until the page has
+  // seen at least one real user gesture (autoplay policy). We can't
+  // guarantee anyone will tap anything before emergency actually hits, so
+  // instead we "unlock" the audio element on the very first tap/click
+  // anywhere on the page (arming, acking, toggling the theme - anything
+  // counts) by playing-then-immediately-pausing it. That one real gesture
+  // satisfies the browser's policy for every future programmatic play()
+  // call on this same element for the rest of the page's life, so the
+  // siren can then start on its own once emergency is reached with no
+  // further interaction needed.
+  useEffect(() => {
+    function unlock() {
+      const el = audioRef.current
+      if (!el) return
+      el.play()
+        .then(() => {
+          el.pause()
+          el.currentTime = 0
+        })
+        .catch(() => {
+          // Autoplay still blocked (e.g. no gesture actually registered) -
+          // next tap will just try again.
+        })
+      window.removeEventListener('pointerdown', unlock)
+    }
+    window.addEventListener('pointerdown', unlock)
+    return () => window.removeEventListener('pointerdown', unlock)
+  }, [])
+
+  // Play the siren, looping at full volume, for exactly as long as the
+  // switch is in "emergency" - start the instant it's reached, stop the
+  // instant it's acknowledged (ack always drops back out of emergency).
+  useEffect(() => {
+    const el = audioRef.current
+    if (!el) return
+    if (status && status.state === 'emergency') {
+      el.volume = 1
+      el.loop = true
+      el.play().catch(() => {
+        // Blocked by autoplay policy because nobody has tapped the page
+        // yet - the pointerdown unlock handler above will catch the next
+        // tap and this effect re-running (status keeps polling) will
+        // retry play() shortly after.
+      })
+    } else {
+      el.pause()
+      el.currentTime = 0
+    }
+  }, [status && status.state])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -335,6 +386,7 @@ function App() {
 
   if (!status) {
     return html`
+      <audio ref=${audioRef} src="./audio/emergency-siren.wav" preload="auto"></audio>
       <div class="toolbar"><${ThemeToggle} theme=${theme} setTheme=${setTheme} /></div>
       <main>
         ${connectionError
@@ -363,6 +415,7 @@ function App() {
       : 0
 
   return html`
+    <audio ref=${audioRef} src="./audio/emergency-siren.wav" preload="auto"></audio>
     <div class="toolbar">
       ${stage !== 'disarmed' &&
       html`<button type="button" class="icon-btn disarm-btn" onClick=${handleDisarm}>Disarm</button>`}

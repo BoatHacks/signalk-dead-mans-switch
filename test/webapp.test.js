@@ -284,6 +284,67 @@ test('a failed initial load (never connected) shows the connection banner instea
   assert.doesNotMatch(doc.getElementById('app').textContent, /Loading/)
 })
 
+test('audio element points at the bundled siren file, hidden and not autoplaying/looping by default', async (t) => {
+  const html = fs.readFileSync(INDEX_HTML, 'utf8')
+  assert.match(html, /<audio ref=\$\{audioRef\} src="\.\/audio\/emergency-siren\.wav"/)
+})
+
+test('starts the siren, looped at full volume, the moment emergency is reached', async (t) => {
+  const fetchImpl = await statusFetch('emergency', null, DEFAULT_CONFIG)
+  const { dom, doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+  await new Promise((resolve) => setTimeout(resolve, 100))
+
+  const audio = doc.querySelector('audio')
+  assert.ok(audio, 'an audio element should be present')
+  assert.ok(dom.window.__audioCalls.play > 0, 'play() should have been called on reaching emergency')
+  assert.equal(audio.loop, true)
+  assert.equal(audio.volume, 1)
+})
+
+test('does not play the siren for non-emergency stages', async (t) => {
+  const fetchImpl = await statusFetch('alarm', 20, DEFAULT_CONFIG)
+  const { dom, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  assert.equal(dom.window.__audioCalls.play, 0, 'siren should not play before reaching emergency')
+})
+
+test('stops the siren once emergency is acknowledged', async (t) => {
+  let state = 'emergency'
+  const fetchImpl = async (url, opts) => {
+    if (String(url).endsWith('/status')) {
+      return {
+        ok: true,
+        status: 200,
+        url,
+        json: async () => ({
+          state,
+          secondsRemaining: state === 'emergency' ? null : 900,
+          deadlineAt: null,
+          notificationPath: 'notifications.security.deadmansswitch',
+          config: DEFAULT_CONFIG,
+        }),
+      }
+    }
+    if (String(url).endsWith('/ack')) {
+      state = 'armed' // ack always resets back to a freshly-armed switch
+    }
+    return { ok: true, status: 200, url, json: async () => ({ ok: true }) }
+  }
+
+  const { dom, doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+  await new Promise((resolve) => setTimeout(resolve, 100))
+
+  assert.ok(dom.window.__audioCalls.play > 0, 'siren should have started')
+
+  doc.querySelector('button.state-button').dispatchEvent(new Event('click', { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 100))
+
+  assert.ok(dom.window.__audioCalls.pause > 0, 'siren should have been paused after acknowledging')
+})
+
 test('BASE is a fixed absolute /plugins/<id> path, not derived from window.location', () => {
   const html = fs.readFileSync(INDEX_HTML, 'utf8')
   assert.match(html, /const BASE = '\/plugins\/signalk-dead-mans-switch'/)

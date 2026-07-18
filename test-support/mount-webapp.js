@@ -29,6 +29,23 @@ async function mountWebapp(fetchImpl, { url = 'http://localhost/plugins/signalk-
 
   const dom = new JSDOM('<!DOCTYPE html><div id="app"></div>', { url })
 
+  // jsdom doesn't implement real media playback - HTMLMediaElement.play()
+  // throws "Not implemented" and returns undefined rather than a Promise,
+  // which would break the webapp's own .then()/.catch() chain around it.
+  // Stub both methods and expose call counts so tests can assert on
+  // play/pause behavior (e.g. "the siren started/stopped") without a real
+  // audio backend.
+  dom.window.__audioCalls = { play: 0, pause: 0 }
+  dom.window.HTMLMediaElement.prototype.play = function () {
+    dom.window.__audioCalls.play++
+    this.paused = false
+    return Promise.resolve()
+  }
+  dom.window.HTMLMediaElement.prototype.pause = function () {
+    dom.window.__audioCalls.pause++
+    this.paused = true
+  }
+
   const previous = {
     window: globalThis.window,
     document: globalThis.document,

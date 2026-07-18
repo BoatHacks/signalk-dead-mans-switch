@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Webapp plays a bundled siren sound, looped at full volume, the instant
+  `emergency` is reached; stops the instant it's acknowledged. Includes
+  an autoplay-policy "unlock" on the page's first tap/click so the siren
+  can start later without needing a fresh user gesture right at the
+  emergency moment.
+  **Note:** the bundled audio asset's license is not yet confirmed - see
+  `public/audio/NOTICE.md`. Do not publish/release with it bundled until
+  that's resolved.
+
 ### Changed
 - Webapp now clearly flags a lost connection to the SignalK server: a
   prominent banner appears, the state button and progress bar are dimmed
