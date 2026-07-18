@@ -126,7 +126,10 @@ or a device publishing straight to SignalK:
 
 Published notifications also set `canSilence: false` - silencing alone
 (muting sound without truly checking in) must never be mistaken for an
-acknowledgement.
+acknowledgement - both as a top-level field and inside a `status`
+object mirroring SignalK's v2 API shape, since a server's own computed
+`status.canSilence` is normally based on `state` alone and may not
+honor the top-level field by itself.
 
 Deltas the plugin publishes itself are recognized (by source) and
 never reprocessed, so this can't create a feedback loop. The REST API

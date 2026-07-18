@@ -40,6 +40,14 @@ test('published notifications always have canSilence: false - silencing alone mu
   assert.equal(value.canSilence, false)
 })
 
+test('published notifications also include a status.canSilence: false, in case a server respects a plugin-supplied status', (t) => {
+  const { app } = setup(t)
+  t.mock.timers.tick(60_000)
+  const value = app.lastValueFor('notifications.security.deadmansswitch')
+  assert.equal(value.status.canSilence, false)
+  assert.equal(value.status.canAcknowledge, true)
+})
+
 test('escalates alert -> warn -> alarm -> emergency if never acknowledged', (t) => {
   const { app } = setup(t)
   t.mock.timers.tick(60_000) // interval elapses -> alert

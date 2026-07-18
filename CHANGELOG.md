@@ -20,7 +20,11 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Published notifications now include `canSilence: false` - silencing
   alone (muting sound without truly checking in) must never be mistaken
-  for an acknowledgement.
+  for an acknowledgement. Also included as `status.canSilence: false` in
+  a full `status` object mirroring SignalK's v2 API shape, in case a
+  given server respects a plugin-supplied status rather than always
+  recomputing it from `state` alone (which appears to be the norm, per
+  live testing - the top-level field alone wasn't enough).
 
 ## [0.3.0] - 2026-07-18
 
