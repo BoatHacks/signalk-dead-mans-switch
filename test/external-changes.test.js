@@ -218,3 +218,36 @@ test('a delta with "sound" still present in method is NOT treated as an acknowle
   app._emitExternalDelta(PATH, { state: 'warn', method: ['visual', 'sound'] })
   assert.equal(app.lastValueFor(PATH).state, 'warn', 'sound still present - should be read as an external stage write, not an ack')
 })
+
+test('real-world captured payload: Freeboard acknowledging a "warn" notification resets to armed', (t) => {
+  // Exact payload captured from a live SignalK server's notification value
+  // after clicking "Acknowledge" in Freeboard on a warn-stage notification.
+  // Note method is fully empty here (both visual AND sound stripped, not
+  // just sound as the emergency-specific spec note might suggest) - our
+  // detection (method no longer including "sound") still catches this.
+  // Also note: the server's own `status.canSilence` came back `true` here
+  // despite this plugin publishing `canSilence: false` in the raw value -
+  // the v2 API computes `status.*` independently from `state`, ignoring
+  // whatever the plugin puts in the value, so that field can flag intent
+  // but can't actually force Freeboard's UI to hide a Silence option.
+  const { app, plugin } = setup(t)
+  const { makeFakeRouter } = require('../test-support/fake-app')
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+  t.mock.timers.tick(60_000) // -> alert
+  t.mock.timers.tick(30_000) // -> warn
+  assert.equal(app.lastValueFor(PATH).state, 'warn')
+
+  app._emitExternalDelta(PATH, {
+    state: 'warn',
+    message: 'Dead man\u2019s switch: still no acknowledgement. Escalating.',
+    method: [],
+    timestamp: '2026-07-18T17:42:02.185Z',
+    canSilence: false,
+    id: '6ccfa911-453f-4eb9-87dd-5af4d2f8393a',
+  })
+
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.body.state, 'armed')
+  assert.equal(res.body.secondsRemaining, 60)
+})
