@@ -2,7 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('fs')
 const path = require('path')
-const { mountWebapp, INDEX_HTML } = require('../test-support/mount-webapp')
+const { mountWebapp, INDEX_HTML, PUBLIC_DIR } = require('../test-support/mount-webapp')
 
 test('webapp has no CDN imports - only local/vendored ones', () => {
   const html = fs.readFileSync(INDEX_HTML, 'utf8')
@@ -434,6 +434,20 @@ test('daylight escalation colors: alert light yellow, warn bright yellow, alarm/
   assert.match(html, /--stage-emergency:\s*#ce2029/)
   assert.match(html, /--stage-emergency-outline:\s*#ffd500/)
   assert.match(html, /border-width:\s*6px/)
+})
+
+test('favicon is wired up, and the icon is not embedded as a visible image in the app UI itself', () => {
+  const html = fs.readFileSync(INDEX_HTML, 'utf8')
+  assert.match(html, /<link rel="icon" type="image\/png" href="assets\/icons\/icon-512\.png">/)
+  // The icon file should exist as a static asset...
+  assert.ok(fs.existsSync(path.join(PUBLIC_DIR, 'assets/icons/icon-512.png')))
+  // ...but should not appear as an <img> anywhere in the page body/script.
+  assert.doesNotMatch(html, /<img[^>]*icon-512/)
+})
+
+test('package.json declares the SignalK app icon for the admin UI app list', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(PUBLIC_DIR, '..', 'package.json'), 'utf8'))
+  assert.equal(pkg.signalk && pkg.signalk.appIcon, './assets/icons/icon-512.png')
 })
 
 test('BASE is a fixed absolute /plugins/<id> path, not derived from window.location', () => {

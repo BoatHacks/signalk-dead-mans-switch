@@ -108,6 +108,13 @@ Set via the plugin's config page in the Signal K admin UI:
 | Alarm window                | `60` seconds                 | Time to ack before `alarm` escalates to `emergency`                |
 | Notification sub-path      | `security.deadmansswitch`   | Appended after `notifications.`                                    |
 
+## App icon
+
+`public/assets/icons/icon-512.png` is used as the browser favicon and
+as the app's icon in the SignalK admin UI's webapp list
+(`package.json`'s `signalk.appIcon`). It's not shown anywhere inside
+the webapp's own UI.
+
 ## Development
 
 ```

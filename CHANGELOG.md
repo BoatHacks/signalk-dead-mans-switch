@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- App icon/favicon (`public/assets/icons/icon-512.png`), wired up as the
+  browser favicon and as the SignalK admin UI app-list icon
+  (`package.json`'s `signalk.appIcon`). Not used anywhere inside the
+  webapp's own UI.
 - Webapp plays a second bundled sound while in `alarm`: once immediately
   on entering the stage, then every 10s, stopping the moment the stage
   changes away from `alarm` (escalating to emergency or being
