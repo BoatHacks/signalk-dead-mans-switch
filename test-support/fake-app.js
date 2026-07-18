@@ -7,6 +7,7 @@ function makeFakeApp({ echoSource } = {}) {
   const statuses = []
   const debugCalls = []
   const busSubscribers = {} // path -> [callback, ...]
+  const pathValues = {} // path -> current value, for getSelfPath()
   return {
     // A real SignalK server may redeliver a plugin's own handleMessage()
     // write back through the same delta bus its subscriptions use,
@@ -20,6 +21,7 @@ function makeFakeApp({ echoSource } = {}) {
       const source = echoSource !== undefined ? echoSource : pluginId
       ;(delta.updates || []).forEach((update) => {
         ;(update.values || []).forEach(({ path, value }) => {
+          pathValues[path] = value
           const echoDelta = { path, value, $source: source, source: { label: source } }
           ;(busSubscribers[path] || []).forEach((cb) => cb(echoDelta))
         })
@@ -33,6 +35,12 @@ function makeFakeApp({ echoSource } = {}) {
     // assert on _debugCalls directly rather than on visible output).
     debug(...args) {
       debugCalls.push(args)
+    },
+    // Reads the current value at a path directly - what the plugin's poll
+    // fallback uses. Returns undefined if nothing has ever been set,
+    // matching "path not populated yet".
+    getSelfPath(path) {
+      return pathValues[path]
     },
     streambundle: {
       getSelfBus(path) {
@@ -52,8 +60,17 @@ function makeFakeApp({ echoSource } = {}) {
     // SignalK directly). `source` defaults to a generic external plugin id
     // so tests don't accidentally look self-originated.
     _emitExternalDelta(path, value, source = 'some-other-plugin') {
+      pathValues[path] = value
       const delta = { path, value, $source: source, source: { label: source } }
       ;(busSubscribers[path] || []).forEach((cb) => cb(delta))
+    },
+    // Test helper simulating the exact real-world gap the poll fallback
+    // exists for: the server's stored value at `path` changes, but for
+    // whatever reason (non-preferred source filtering, a v2 API action
+    // that doesn't re-emit a delta, etc.) no delta bus subscriber is ever
+    // notified. Only getSelfPath() (and therefore the poll) will see it.
+    _setPathValueWithoutBusEvent(path, value) {
+      pathValues[path] = value
     },
     _busSubscriberCount(path) {
       return (busSubscribers[path] || []).length

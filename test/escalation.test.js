@@ -4,7 +4,7 @@ const { makeFakeApp } = require('../test-support/fake-app')
 const buildPlugin = require('../index.js')
 
 function setup(t, opts = {}) {
-  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
   const app = makeFakeApp()
   const plugin = buildPlugin(app)
   plugin.start({
@@ -154,7 +154,7 @@ test('a stale escalated notification left over from before a restart is replaced
   // (e.g. reconfigured, or the config was already set that way) - the
   // leftover escalated notification must not be left hanging around
   // forever for a switch that is no longer managing it.
-  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
   const app = makeFakeApp()
   app.handleMessage('some-other-source', {
     updates: [{ values: [{ path: 'notifications.security.deadmansswitch', value: { state: 'alarm' } }] }],

@@ -10,7 +10,7 @@ function render(call) {
 }
 
 function setup(t, opts = {}) {
-  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
   const app = makeFakeApp()
   const plugin = buildPlugin(app)
   plugin.start({
@@ -87,7 +87,7 @@ test('app.debug() captures received external deltas (INPUT), including ones trea
     `expected an external-delta input debug call, got: ${JSON.stringify(lines)}`
   )
   assert.ok(
-    lines.some((l) => l.includes('STATE armed -> alarm') && l.includes('external stage write')),
+    lines.some((l) => l.includes('STATE armed -> alarm') && l.includes('stage write')),
     `expected the resulting state transition to be logged with its reason, got: ${JSON.stringify(lines)}`
   )
 })
@@ -109,7 +109,7 @@ test('app.debug() notes when an external delta is ignored (disarmed)', (t) => {
 })
 
 test('does not throw if app.debug is not provided by the host (older server or minimal test double)', (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
   const app = makeFakeApp()
   delete app.debug
   const plugin = buildPlugin(app)

@@ -4,7 +4,7 @@ const { makeFakeApp, makeFakeRouter } = require('../test-support/fake-app')
 const buildPlugin = require('../index.js')
 
 function setup(t, opts = {}) {
-  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
   const app = makeFakeApp()
   const plugin = buildPlugin(app)
   plugin.start({ checkIntervalMinutes: 1, ackWindowSeconds: 30, warnWindowSeconds: 20, alarmWindowSeconds: 10, ...opts })

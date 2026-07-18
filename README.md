@@ -109,10 +109,22 @@ convention) - browsable in the SignalK server's Admin UI under
 ## Interoperating with other plugins/devices
 
 The switch's state isn't only driven by its own REST API - it also
-watches the notification path itself (subscribed via
-`app.streambundle`) and reconciles immediately if something else
-writes to it directly, e.g. another plugin, a webapp doing its own PUT,
-or a device publishing straight to SignalK:
+watches the notification path itself and reconciles immediately if
+something else writes to it directly, e.g. another plugin, a webapp
+doing its own PUT, a device publishing straight to SignalK, or a
+client using SignalK's v2 Notifications API. Watched two ways:
+
+- an `app.streambundle` delta subscription - instant when it works
+- a periodic `app.getSelfPath()` poll (every 2s) as a fallback - real
+  servers can filter deltas from a non-preferred source out of the
+  delta chain before subscribers ever see them, and the v2
+  Notifications API's acknowledge/silence/clear actions may update a
+  notification's `status` without re-emitting a normal delta at all.
+  Polling reads the actual current value directly, sidestepping
+  whichever of those gaps would otherwise mean a real acknowledgement
+  or external change is silently missed.
+
+Either path reacts the same way to what it sees:
 
 - writing one of the escalation states (`alert`/`warn`/`alarm`/
   `emergency`) snaps the switch to that stage, with a freshly-started

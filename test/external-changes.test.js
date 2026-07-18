@@ -4,7 +4,7 @@ const { makeFakeApp } = require('../test-support/fake-app')
 const buildPlugin = require('../index.js')
 
 function setup(t, opts = {}) {
-  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
   const app = makeFakeApp()
   const plugin = buildPlugin(app)
   plugin.start({
@@ -26,7 +26,7 @@ test('subscribes to the notification path on start', (t) => {
 })
 
 test('unsubscribes on stop', (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
   const app = makeFakeApp()
   const plugin = buildPlugin(app)
   plugin.start({ checkIntervalMinutes: 1, ackWindowSeconds: 30, warnWindowSeconds: 20, alarmWindowSeconds: 10 })
@@ -121,7 +121,7 @@ test('self-echo is caught by the reentrancy guard even when the source string do
   // plugin.id assumption - this proves the synchronous reentrancy guard
   // (isPublishingOwnChange) catches our own writes regardless, as a
   // second line of defense independent of the source-string check.
-  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
   const { makeFakeApp } = require('../test-support/fake-app')
   const app = makeFakeApp({ echoSource: 'totally-different-source-string' })
   const plugin = buildPlugin(app)
@@ -149,7 +149,7 @@ test('self-echo is caught by the reentrancy guard even when the source string do
 })
 
 test('acknowledging from any stage always results in "armed" with a full-length timer, never "disarmed"', (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
   const { makeFakeApp, makeFakeRouter } = require('../test-support/fake-app')
 
   for (const stage of ['alert', 'warn', 'alarm', 'emergency']) {

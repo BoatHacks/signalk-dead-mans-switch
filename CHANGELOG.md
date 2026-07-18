@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- External changes on the notification path (acknowledgements, other
+  plugins/devices writing to it) were sometimes never seen at all -
+  debug logging showed no `INPUT external delta` ever arriving on some
+  real servers. Likely cause: servers filter deltas from a
+  non-preferred source out of the delta chain before
+  `app.streambundle` subscribers ever see them, and/or the v2
+  Notifications API's acknowledge/silence/clear actions may update a
+  notification's `status` without re-emitting a normal delta at all.
+  Added a periodic `app.getSelfPath()` poll (every 2s) as a fallback
+  alongside the existing delta subscription - it reads the actual
+  current value directly, independent of whatever nuance of the delta
+  chain would otherwise drop the change silently.
+
 ### Added
 - Debug logging: every state transition (with the reason - a timer
   elapsing, an ack, an external change, etc.), every notification

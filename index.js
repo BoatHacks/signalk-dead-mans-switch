@@ -24,6 +24,16 @@
 // values (alert/warn/alarm/emergency are all valid states), which keeps
 // the mapping trivial and lets any standard SignalK alarm-display webapp
 // pick this notification up with no special-casing.
+//
+// External changes on the notification path (another plugin, a client's
+// own PUT, or SignalK's v2 Notifications API acknowledge/silence/clear
+// actions) are watched two ways: an app.streambundle delta subscription
+// (instant when it works) and a periodic app.getSelfPath() poll (a
+// fallback for real-world gaps - a server may filter deltas from a
+// non-preferred source out of the delta chain before subscribers ever
+// see them, and the v2 API's actions may update a notification's
+// `status` without re-emitting a normal delta at all). Both funnel
+// through the same reconciliation logic below.
 
 const STAGES = ['alert', 'warn', 'alarm', 'emergency']
 
@@ -109,7 +119,63 @@ module.exports = function (app) {
   // what shape it arrives in.
   let isPublishingOwnChange = false
 
+  // Reduces a notification value to just the fields that matter for
+  // deciding whether something meaningfully changed (state, whether
+  // "sound" is present in method, whether it's acknowledged) - ignoring
+  // `message`, `timestamp`, the server-assigned `id`, and any other
+  // `status` fields the server may add/recompute on top of what we
+  // publish. Used to detect real external changes (via polling - see
+  // below) without being fooled by a poll simply reflecting our own last
+  // write back with cosmetic differences.
+  function significantSignature(value) {
+    if (!value || typeof value !== 'object') return 'none'
+    const soundPresent = Array.isArray(value.method) && value.method.includes('sound')
+    const acknowledged = !!(value.status && value.status.acknowledged === true)
+    return JSON.stringify({ state: value.state, soundPresent, acknowledged })
+  }
+
+  // app.getSelfPath() for a notification path may return either the bare
+  // notification value, or the full tree node ({value, timestamp,
+  // $source}) wrapping it, depending on server version - unwrap
+  // defensively rather than assuming one shape.
+  function unwrapNotificationValue(raw) {
+    if (raw && typeof raw === 'object' && !('state' in raw) && raw.value && typeof raw.value === 'object' && 'state' in raw.value) {
+      return raw.value
+    }
+    return raw
+  }
+
+  // Tracks the significant fields of whatever we most recently reconciled
+  // against (our own last publish, or the last external change already
+  // acted on) - see pollForExternalChange() below.
+  let lastReconciledSignature = null
+
   function publishNotification(stage) {
+    const value = {
+      state: stage,
+      message: STAGE_MESSAGE[stage],
+      method: ['visual', 'sound'],
+      timestamp: new Date().toISOString(),
+      // The whole point of this switch is that "I muted the
+      // sound" must never be mistaken for "a human is
+      // present" - silencing alone would let it go quiet
+      // while nobody has actually checked in. Acknowledging
+      // (which does properly reset the switch - see below)
+      // remains available.
+      //
+      // canSilence isn't a top-level notification field in the
+      // SignalK spec - the real, respected one lives inside
+      // `status`, matching the shape SignalK's v2 Notifications
+      // API itself adds.
+      status: {
+        silenced: false,
+        acknowledged: false,
+        canSilence: false,
+        canAcknowledge: true,
+        canClear: false,
+      },
+    }
+    lastReconciledSignature = significantSignature(value)
     debugLog(`OUTPUT notification -> ${notificationPath}:`, {
       state: stage,
       message: STAGE_MESSAGE[stage],
@@ -123,30 +189,7 @@ module.exports = function (app) {
             values: [
               {
                 path: notificationPath,
-                value: {
-                  state: stage,
-                  message: STAGE_MESSAGE[stage],
-                  method: ['visual', 'sound'],
-                  timestamp: new Date().toISOString(),
-                  // The whole point of this switch is that "I muted the
-                  // sound" must never be mistaken for "a human is
-                  // present" - silencing alone would let it go quiet
-                  // while nobody has actually checked in. Acknowledging
-                  // (which does properly reset the switch - see below)
-                  // remains available.
-                  //
-                  // canSilence isn't a top-level notification field in the
-                  // SignalK spec - the real, respected one lives inside
-                  // `status`, matching the shape SignalK's v2 Notifications
-                  // API itself adds.
-                  status: {
-                    silenced: false,
-                    acknowledged: false,
-                    canSilence: false,
-                    canAcknowledge: true,
-                    canClear: false,
-                  },
-                },
+                value,
               },
             ],
           },
@@ -167,6 +210,20 @@ module.exports = function (app) {
   // things (and also indistinguishable from the plugin never having run
   // at all).
   function publishRestingNotification(label) {
+    const value = {
+      state: 'normal',
+      message: label,
+      method: [],
+      timestamp: new Date().toISOString(),
+      status: {
+        silenced: false,
+        acknowledged: false,
+        canSilence: false,
+        canAcknowledge: false,
+        canClear: false,
+      },
+    }
+    lastReconciledSignature = significantSignature(value)
     debugLog(`OUTPUT notification -> ${notificationPath}:`, { state: 'normal', message: label })
     isPublishingOwnChange = true
     try {
@@ -176,19 +233,7 @@ module.exports = function (app) {
             values: [
               {
                 path: notificationPath,
-                value: {
-                  state: 'normal',
-                  message: label,
-                  method: [],
-                  timestamp: new Date().toISOString(),
-                  status: {
-                    silenced: false,
-                    acknowledged: false,
-                    canSilence: false,
-                    canAcknowledge: false,
-                    canClear: false,
-                  },
-                },
+                value,
               },
             ],
           },
@@ -311,20 +356,18 @@ module.exports = function (app) {
   // are recognized (see isOwnDelta below) and ignored, so we don't
   // re-process our own writes or create a feedback loop.
   let unsubscribeExternal = null
+  let pollTimer = null
 
   function isOwnDelta(delta) {
     return isPublishingOwnChange || (delta && (delta.$source === plugin.id || (delta.source && delta.source.label === plugin.id)))
   }
 
-  function handleExternalNotificationChange(delta) {
-    if (isOwnDelta(delta)) {
-      debugLog('INPUT external delta on notification path - own echo, ignored')
-      return
-    }
-    const value = delta && delta.value
-    debugLog('INPUT external delta on notification path:', value)
+  // Shared by both the delta-bus subscription and the poll-based fallback
+  // below - decides what an observed (non-own) notification value means
+  // and acts on it.
+  function reconcileExternalValue(value, sourceDescription) {
     if (state === 'disarmed') {
-      debugLog('  -> ignored, switch is disarmed')
+      debugLog(`  -> ignored (${sourceDescription}), switch is disarmed`)
       return
     }
 
@@ -341,19 +384,66 @@ module.exports = function (app) {
     const acknowledgedViaMethod = Array.isArray(method) && !method.includes('sound')
 
     if (acknowledgedViaStatus || acknowledgedViaMethod) {
-      arm(acknowledgedViaStatus ? 'external ack: status.acknowledged' : 'external ack: method no longer includes sound')
+      arm(`${sourceDescription}: ${acknowledgedViaStatus ? 'status.acknowledged' : 'method no longer includes sound'}`)
       return
     }
 
     const stageIndex = STAGES.indexOf(externalState)
 
     if (stageIndex !== -1) {
-      escalateTo(stageIndex, 'external stage write')
+      escalateTo(stageIndex, `${sourceDescription}: stage write`)
     } else {
       // Cleared, or set to some state we don't recognize as one of our
       // stages (e.g. "normal") - treat either as an acknowledgement.
-      arm('external ack: cleared or non-stage state')
+      arm(`${sourceDescription}: cleared or non-stage state`)
     }
+  }
+
+  function handleExternalNotificationChange(delta) {
+    if (isOwnDelta(delta)) {
+      debugLog('INPUT external delta on notification path - own echo, ignored')
+      return
+    }
+    const value = delta && delta.value
+    debugLog('INPUT external delta on notification path:', value)
+    lastReconciledSignature = significantSignature(value)
+    reconcileExternalValue(value, 'external delta')
+  }
+
+  // Fallback for a real-world gap: a server may not redeliver every
+  // change on a notification path through app.streambundle's delta bus -
+  // e.g. deltas from a source that isn't the "preferred" one for the path
+  // can be filtered out of the delta chain entirely before subscribers
+  // ever see them, and SignalK's v2 Notifications API acknowledge/
+  // silence/clear actions may update the notification's `status` without
+  // re-emitting a normal delta at all. Polling app.getSelfPath() reads
+  // the actual current value directly, sidestepping whatever nuance of
+  // the delta chain would otherwise drop the change. Deliberately kept
+  // alongside (not instead of) the delta subscription above - cheap
+  // insurance, and instant when the delta path does work.
+  const POLL_INTERVAL_MS = 2000
+
+  function pollForExternalChange() {
+    if (state === 'disarmed') return
+    if (typeof app.getSelfPath !== 'function') return
+    let raw
+    try {
+      raw = app.getSelfPath(notificationPath)
+    } catch (err) {
+      return
+    }
+    // undefined means "nothing at this path yet" (or a transient gap
+    // right after our own write hasn't been ingested yet) - not a
+    // meaningful signal either way, so don't treat it as a clear. An
+    // explicit `null` (a real external clear) is still handled below.
+    if (raw === undefined) return
+
+    const value = unwrapNotificationValue(raw)
+    const signature = significantSignature(value)
+    if (signature === lastReconciledSignature) return
+    lastReconciledSignature = signature
+    debugLog('INPUT external poll on notification path:', value)
+    reconcileExternalValue(value, 'external poll')
   }
 
   plugin.start = function (opts) {
@@ -370,6 +460,10 @@ module.exports = function (app) {
     if (app.streambundle && typeof app.streambundle.getSelfBus === 'function') {
       unsubscribeExternal = app.streambundle.getSelfBus(notificationPath).onValue(handleExternalNotificationChange)
       debugLog(`subscribed to external changes on ${notificationPath}`)
+    }
+    if (typeof app.getSelfPath === 'function') {
+      pollTimer = setInterval(pollForExternalChange, POLL_INTERVAL_MS)
+      debugLog(`polling ${notificationPath} for external changes every ${POLL_INTERVAL_MS / 1000}s as a fallback`)
     }
     if (config('enabled', true)) {
       arm('start (enabled)')
@@ -393,6 +487,10 @@ module.exports = function (app) {
     if (unsubscribeExternal) {
       unsubscribeExternal()
       unsubscribeExternal = null
+    }
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = null
     }
   }
 
