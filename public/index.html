@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="version" content="0.3.0" />
+<meta name="version" content="0.4.0" />
 <title>Dead Man's Switch</title>
 <style>
   /* ---------- theme variables (light default, dark override) ----------
@@ -147,14 +147,27 @@
     transition: width 1s linear, background-color 0.2s ease;
   }
 
-  .error-banner {
+  .connection-banner {
     width: 100%;
-    background: color-mix(in srgb, var(--stage-alarm) 15%, var(--surface));
-    border: 1px solid var(--stage-alarm);
-    color: var(--stage-alarm);
-    border-radius: 8px;
-    padding: 10px 14px;
+    background: color-mix(in srgb, var(--stage-alarm) 20%, var(--surface));
+    border: 2px solid var(--stage-alarm);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 12px 14px;
     font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .connection-banner strong { color: var(--stage-alarm); font-size: 14px; }
+
+  /* Dimmed rather than hidden - the whole point is to keep showing the
+     last known state while making unmistakably clear it can no longer be
+     trusted as current. */
+  .state-button.stale,
+  .progress-track.stale {
+    opacity: 0.65;
+    filter: saturate(0.6);
   }
   .loading-note { color: var(--text-muted); font-size: 13px; }
 </style>
@@ -248,7 +261,8 @@ function ThemeToggle({ theme, setTheme }) {
 
 function App() {
   const [status, setStatus] = useState(null)
-  const [error, setError] = useState(null)
+  const [connectionError, setConnectionError] = useState(null)
+  const [lastGoodAt, setLastGoodAt] = useState(null)
   const [theme, setTheme] = useState(getPreferredTheme())
   const pollRef = useRef(null)
 
@@ -275,9 +289,16 @@ function App() {
       .then((r) => r.json())
       .then((s) => {
         setStatus(s)
-        setError(null)
+        setConnectionError(null)
+        setLastGoodAt(Date.now())
       })
-      .catch((e) => setError(e.message))
+      // Deliberately does NOT clear `status` here - losing the connection
+      // shouldn't blank the screen and erase the last thing we knew about
+      // the watch. It's flagged instead (see the connection-lost banner
+      // and the .stale styling below) so the person can tell the
+      // difference between "everything's fine" and "we just don't know
+      // anymore", without losing the last real information either way.
+      .catch((e) => setConnectionError(e.message))
   }
 
   useEffect(() => {
@@ -290,7 +311,7 @@ function App() {
     fetch(`${BASE}${path}`, { method: 'POST', cache: 'no-store' })
       .then(checkOk)
       .then(() => loadStatus())
-      .catch((e) => setError(e.message))
+      .catch((e) => setConnectionError(e.message))
   }
 
   function handleDisarm() {
@@ -315,7 +336,14 @@ function App() {
   if (!status) {
     return html`
       <div class="toolbar"><${ThemeToggle} theme=${theme} setTheme=${setTheme} /></div>
-      <main><p class="loading-note">Loading\u2026</p></main>
+      <main>
+        ${connectionError
+          ? html`<div class="connection-banner">
+              <strong>\u26a0 Can\u2019t reach the SignalK server.</strong>
+              <span>${connectionError}</span>
+            </div>`
+          : html`<p class="loading-note">Loading\u2026</p>`}
+      </main>
     `
   }
 
@@ -341,10 +369,17 @@ function App() {
       <${ThemeToggle} theme=${theme} setTheme=${setTheme} />
     </div>
     <main>
-      ${error && html`<div class="error-banner">${error}</div>`}
+      ${connectionError &&
+      html`<div class="connection-banner">
+        <strong>\u26a0 Connection to the SignalK server lost.</strong>
+        <span>
+          Showing the last known state${lastGoodAt ? html` from ${new Date(lastGoodAt).toLocaleTimeString()}` : ''}
+          - it is no longer updating.
+        </span>
+      </div>`}
 
       <button
-        class=${`state-button ${stage === 'emergency' ? 'blink-outline' : ''}`}
+        class=${`state-button ${stage === 'emergency' ? 'blink-outline' : ''} ${connectionError ? 'stale' : ''}`}
         style=${{ background: color }}
         onClick=${handleStateButton}
       >
@@ -356,7 +391,7 @@ function App() {
         <span class="state-cta">${ACK_LABEL[stage] || 'Tap to acknowledge'}</span>
       </button>
 
-      <div class="progress-track">
+      <div class=${`progress-track ${connectionError ? 'stale' : ''}`}>
         <div class="progress-fill" style=${{ width: `${fillPct}%`, background: color }}></div>
       </div>
     </main>

@@ -233,6 +233,57 @@ test('theme toggle button is present and flips data-theme on the document', asyn
   assert.notEqual(before, after)
 })
 
+test('a failed status fetch shows a clear connection-lost banner and dims the state button, without blanking the last known state', async (t) => {
+  let fail = false
+  const fetchImpl = async (url) => {
+    if (String(url).endsWith('/status')) {
+      if (fail) return Promise.reject(new Error('Failed to fetch'))
+      return {
+        ok: true,
+        status: 200,
+        url,
+        json: async () => ({
+          state: 'warn',
+          secondsRemaining: 30,
+          deadlineAt: Date.now() + 30000,
+          notificationPath: 'notifications.security.deadmansswitch',
+          config: DEFAULT_CONFIG,
+        }),
+      }
+    }
+    return { ok: true, status: 200, url, json: async () => ({}) }
+  }
+
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  // First poll succeeded - no banner yet, last known stage visible.
+  assert.ok(!doc.querySelector('.connection-banner'))
+  assert.match(doc.querySelector('button.state-button').textContent, /Warn/)
+
+  // Now the connection drops; wait for the 1s poll to pick it up.
+  fail = true
+  await new Promise((resolve) => setTimeout(resolve, 1100))
+
+  const banner = doc.querySelector('.connection-banner')
+  assert.ok(banner, 'connection-lost banner should appear once polling starts failing')
+  assert.match(banner.textContent, /lost/i)
+  // The last known state must still be visible, just flagged as stale.
+  const stateBtn = doc.querySelector('button.state-button')
+  assert.match(stateBtn.textContent, /Warn/)
+  assert.ok(stateBtn.classList.contains('stale'))
+  assert.ok(doc.querySelector('.progress-track').classList.contains('stale'))
+})
+
+test('a failed initial load (never connected) shows the connection banner instead of "Loading..."', async (t) => {
+  const fetchImpl = async () => Promise.reject(new Error('NetworkError when attempting to fetch resource'))
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  assert.ok(doc.querySelector('.connection-banner'), 'connection banner should show even before any successful load')
+  assert.doesNotMatch(doc.getElementById('app').textContent, /Loading/)
+})
+
 test('BASE is a fixed absolute /plugins/<id> path, not derived from window.location', () => {
   const html = fs.readFileSync(INDEX_HTML, 'utf8')
   assert.match(html, /const BASE = '\/plugins\/signalk-dead-mans-switch'/)

@@ -50,6 +50,15 @@ Two ways to ack:
   for wiring up a physical hardware ack button (e.g. an ESP32 with a big
   panic-style pushbutton at the helm) instead of relying on a screen.
 
+If the webapp loses its connection to the SignalK server (network drop,
+server restart, etc.), it does not go blank or keep showing a frozen
+countdown as if nothing were wrong. It shows a clear "connection lost"
+banner and visibly dims the state button and progress bar, while still
+displaying the last known state (and when it was last confirmed) - so
+it's obvious the display can no longer be trusted, without losing the
+last real information either. Polling continues in the background and
+the banner clears automatically once the connection recovers.
+
 ## REST API
 
 All endpoints are mounted at `/plugins/signalk-dead-mans-switch`.

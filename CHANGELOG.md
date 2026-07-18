@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Webapp now clearly flags a lost connection to the SignalK server: a
+  prominent banner appears, the state button and progress bar are dimmed
+  to mark the data as stale, and the last known state (with a timestamp)
+  stays visible rather than freezing silently or blanking out. Recovers
+  automatically once polling succeeds again.
 - Merged the state display and the ack/arm button into a single button:
   it now shows the stage, the remaining time in that stage's window, and
   doubles as the tap-to-acknowledge/tap-to-arm action.
