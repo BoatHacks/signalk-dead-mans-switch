@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-18
+
 ### Added
 - App-store screenshots (640x480) for the armed (light and dark theme),
   warn, and emergency states, wired up via `package.json`'s
