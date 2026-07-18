@@ -115,9 +115,11 @@ or a device publishing straight to SignalK:
   /signalk/v2/api/notifications/{id}/acknowledge`, which is what clients
   like Freeboard's "Acknowledge" button actually call) resets the switch
   the same as calling `/ack`. That action doesn't clear the notification
-  or change `state` - it strips `"sound"` from `method` instead (only
-  `"sound"` when `state` is `emergency`) - so this is detected by that
-  signal specifically, not by state or clearing
+  or change `state`. When a server exposes it, `status.acknowledged:
+  true` is trusted directly - the most authoritative signal available.
+  As a fallback for servers where `status` isn't populated, the spec
+  also has the action strip `"sound"` from `method` (only `"sound"`
+  when `state` is `emergency`), so that's checked too
 - clearing the notification, or writing any other state (e.g.
   `normal`), while the switch is armed or escalated is treated as an
   external acknowledgement - same effect as calling `/ack`

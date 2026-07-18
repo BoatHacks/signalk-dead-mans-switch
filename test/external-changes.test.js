@@ -278,3 +278,55 @@ test('real-world captured payload: Freeboard acknowledging an "alert" notificati
   assert.equal(res.body.state, 'armed')
   assert.equal(res.body.secondsRemaining, 60)
 })
+
+test('status.acknowledged: true is trusted directly as an acknowledgement, even if method still contained "sound"', (t) => {
+  // Direct, most-authoritative signal a v2-API-capable server can give -
+  // must be trusted on its own, not only as a tiebreaker alongside method.
+  const { app, plugin } = setup(t)
+  const { makeFakeRouter } = require('../test-support/fake-app')
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+  t.mock.timers.tick(60_000) // -> alert
+  assert.equal(app.lastValueFor(PATH).state, 'alert')
+
+  app._emitExternalDelta(PATH, {
+    state: 'alert',
+    method: ['visual', 'sound'], // deliberately NOT stripped
+    status: { silenced: false, acknowledged: true, canSilence: true, canAcknowledge: true, canClear: false },
+  })
+
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.body.state, 'armed', 'status.acknowledged: true must be trusted regardless of method')
+  assert.equal(res.body.secondsRemaining, 60)
+})
+
+test('real-world captured payload: status.acknowledged becomes true on a "warn" notification (same id, escalated from alert) and resets to armed', (t) => {
+  // Exact payload sequence captured live: the plugin issued an "alert"
+  // (id 2e604278-...), it auto-escalated to "warn" (same id - the
+  // server's Notification Manager tracks one id per logical notification
+  // across state transitions), and Freeboard's Acknowledge was clicked
+  // while it was at "warn". status.canSilence is still true here too
+  // (server-computed, unaffected by this plugin's status.canSilence: false
+  // - see the note in escalation.test.js) but status.acknowledged is the
+  // signal that actually matters, and it's true.
+  const { app, plugin } = setup(t)
+  const { makeFakeRouter } = require('../test-support/fake-app')
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+  t.mock.timers.tick(60_000) // -> alert
+  t.mock.timers.tick(30_000) // -> warn
+  assert.equal(app.lastValueFor(PATH).state, 'warn')
+
+  app._emitExternalDelta(PATH, {
+    state: 'warn',
+    message: 'Dead man\u2019s switch: still no acknowledgement. Escalating.',
+    method: [],
+    timestamp: '2026-07-18T18:32:11.248Z',
+    status: { silenced: false, acknowledged: true, canSilence: true, canAcknowledge: true, canClear: false },
+    id: '2e604278-df2c-4860-a5e2-493a4b5d7f85',
+  })
+
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.body.state, 'armed')
+  assert.equal(res.body.secondsRemaining, 60)
+})

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- The switch now also trusts `status.acknowledged: true` directly as an
+  acknowledgement signal, when a server's v2 Notifications API exposes
+  it - the most direct, authoritative signal available. Live testing
+  showed the `method`-stripping heuristic alone wasn't always enough to
+  catch a real acknowledgement in time; `status.acknowledged` is checked
+  first, with the method-based check remaining as a fallback for
+  servers/configurations where `status` isn't populated.
 - Acknowledging from Freeboard (and any other client using SignalK's v2
   Notifications API) now actually works. That API's acknowledge action
   does NOT clear the notification or change its `state` - per spec it

@@ -218,15 +218,18 @@ module.exports = function (app) {
   //     (POST /signalk/v2/api/notifications/{id}/acknowledge, which is
   //     what clients like Freeboard's "Acknowledge" button actually call)
   //     is treated the same as our own /ack. Importantly, that action does
-  //     NOT clear the notification or change its `state` - per the SignalK
-  //     spec it strips "sound" from the `method` array instead (and, for
-  //     state=emergency specifically, ONLY "sound" - "visual" stays). So
-  //     detecting this can't rely on state/value at all; it's recognized
-  //     by `method` no longer including "sound" while a stage is still
-  //     set. Watch for this BEFORE the stage-matching check below, since
-  //     an acknowledged-but-still-escalated delta would otherwise look
-  //     like "the same stage being written again" and just restart that
-  //     stage's timer instead of resetting all the way back to armed.
+  //     NOT clear the notification or change its `state`. When the server
+  //     exposes the v2 API's `status` object, `status.acknowledged: true`
+  //     is the most direct, authoritative signal and is trusted outright.
+  //     As a fallback for servers/configurations where `status` isn't
+  //     populated, the spec also has the action strip "sound" from the
+  //     `method` array (and, for state=emergency specifically, ONLY
+  //     "sound" - "visual" stays), so `method` no longer including "sound"
+  //     is checked too. Either signal is watched for BEFORE the
+  //     stage-matching check below, since an acknowledged-but-still-
+  //     escalated delta would otherwise look like "the same stage being
+  //     written again" and just restart that stage's timer instead of
+  //     resetting all the way back to armed.
   //   - a stage value (alert/warn/alarm/emergency) written externally
   //     (with sound still present in method) snaps our state machine to
   //     that stage, exactly as if we'd escalated to it ourselves, with a
@@ -254,9 +257,17 @@ module.exports = function (app) {
     const value = delta && delta.value
     const externalState = value && value.state
     const method = value && value.method
+    const status = value && value.status
+    // status.acknowledged is the most direct, authoritative signal a
+    // server can give us - when present and true, trust it outright.
+    // method no longer including "sound" is a fallback for servers/
+    // configurations where status isn't populated at all (e.g. the v2
+    // Notifications API isn't enabled) but the method-stripping behavior
+    // still happens.
+    const acknowledgedViaStatus = !!status && status.acknowledged === true
     const acknowledgedViaMethod = Array.isArray(method) && !method.includes('sound')
 
-    if (acknowledgedViaMethod) {
+    if (acknowledgedViaStatus || acknowledgedViaMethod) {
       arm()
       return
     }
