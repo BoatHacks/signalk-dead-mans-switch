@@ -83,7 +83,7 @@ test('progress bar grows further as remaining time shrinks (fill direction, not 
   assert.ok(pct > 80, `expected a high fill percentage near the deadline, got ${pct}%`)
 })
 
-test('progress bar is full and state-button blinks its outline in emergency', async (t) => {
+test('progress bar is full and the whole state-button blinks in emergency', async (t) => {
   const fetchImpl = await statusFetch('emergency', null, DEFAULT_CONFIG)
   const { doc, unmount } = await mountWebapp(fetchImpl)
   t.after(unmount)
@@ -91,7 +91,7 @@ test('progress bar is full and state-button blinks its outline in emergency', as
   const fill = doc.querySelector('.progress-fill')
   assert.equal(fill.style.width, '100%')
   const stateBtn = doc.querySelector('button.state-button')
-  assert.ok(stateBtn.classList.contains('blink-outline'))
+  assert.ok(stateBtn.classList.contains('blink'))
 })
 
 test('disarm button sits in the top toolbar next to the theme toggle, hidden while disarmed', async (t) => {

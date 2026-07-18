@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Emergency now blinks the whole state button (background alternates
+  between two red shades), not just the outline.
+
 ### Added
 - Webapp plays a bundled siren sound, looped at full volume, the instant
   `emergency` is reached; stops the instant it's acknowledged. Includes
