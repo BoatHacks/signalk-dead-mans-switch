@@ -95,6 +95,11 @@ All endpoints are mounted at `/plugins/signalk-dead-mans-switch`.
 | POST   | `/arm`     | (Re-)arm the switch                                      |
 | POST   | `/disarm`  | Disarm - stops all timers, clears any live notification  |
 
+Fully documented as an OpenAPI 3.0 definition in `openApi.json`
+(exposed via `plugin.getOpenApi()`, per SignalK's plugin API
+convention) - browsable in the SignalK server's Admin UI under
+**Documentation -> OpenAPI** once the plugin is installed.
+
 ## Configuration
 
 Set via the plugin's config page in the Signal K admin UI:

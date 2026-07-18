@@ -19,6 +19,8 @@
 
 const STAGES = ['alert', 'warn', 'alarm', 'emergency']
 
+const openapi = require('./openApi.json')
+
 const STAGE_MESSAGE = {
   alert: 'Dead man\u2019s switch: are you still there? Acknowledge to reset the timer.',
   warn: 'Dead man\u2019s switch: still no acknowledgement. Escalating.',
@@ -212,6 +214,11 @@ module.exports = function (app) {
       },
     },
   }
+
+  // If a plugin provides an API, SignalK's convention is to implement
+  // getOpenApi() returning the parsed openApi.json - this surfaces the
+  // definition in the server's Admin UI under Documentation -> OpenAPI.
+  plugin.getOpenApi = () => openapi
 
   // ---- REST API for the ack webapp (and any hardware ack button) -----------
 

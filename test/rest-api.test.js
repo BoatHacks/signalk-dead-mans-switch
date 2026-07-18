@@ -57,3 +57,18 @@ test('POST /arm re-arms and returns the fresh countdown', (t) => {
   assert.equal(res.body.state, 'armed')
   assert.equal(res.body.secondsRemaining, 60)
 })
+
+test('getOpenApi() documents exactly the routes registerWithRouter exposes', (t) => {
+  const { plugin } = setup(t)
+  const spec = plugin.getOpenApi()
+  assert.equal(spec.openapi, '3.0.3')
+  assert.deepEqual(Object.keys(spec.paths).sort(), ['/ack', '/arm', '/disarm', '/status'])
+  assert.equal(spec.paths['/status'].get !== undefined, true)
+  assert.equal(spec.paths['/ack'].post !== undefined, true)
+  assert.equal(spec.paths['/arm'].post !== undefined, true)
+  assert.equal(spec.paths['/disarm'].post !== undefined, true)
+  // The API is mounted under /plugins/<id>, not at the SignalK API root -
+  // per SignalK's documented convention, that means a `servers` entry is
+  // required or the docs would present the wrong base path.
+  assert.equal(spec.servers[0].url, '/plugins/signalk-dead-mans-switch')
+})

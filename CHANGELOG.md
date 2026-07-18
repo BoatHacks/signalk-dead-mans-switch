@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- REST API documented as an OpenAPI 3.0 definition (`openApi.json`),
+  exposed via `plugin.getOpenApi()` per SignalK's plugin convention -
+  browsable in the server Admin UI under Documentation -> OpenAPI.
+
 ## [0.2.0] - 2026-07-18
 
 ### Added
