@@ -1,7 +1,7 @@
 {
   "name": "signalk-dead-mans-switch",
   "version": "0.1.0",
-  "description": "SignalK plugin implementing a watch dead man's switch: periodic 'you still there?' check-ins that escalate through alert -> warn -> alarm -> emergency notification states until acknowledged",
+  "description": "The dead man's switch requires you to push a button, and escalates notifications from alert all the way up to emergency if you don't",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
