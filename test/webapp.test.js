@@ -415,6 +415,17 @@ test('stops repeating the alarm sound once acknowledged out of alarm', async (t)
   )
 })
 
+test('emergency shows a much larger "TAP HERE" call to action instead of the usual ack text', async (t) => {
+  const fetchImpl = await statusFetch('emergency', null, DEFAULT_CONFIG)
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  const cta = doc.querySelector('.state-cta')
+  assert.ok(cta, 'a CTA element should be present')
+  assert.match(cta.textContent, /TAP HERE/)
+  assert.ok(cta.classList.contains('emergency-cta'))
+})
+
 test('BASE is a fixed absolute /plugins/<id> path, not derived from window.location', () => {
   const html = fs.readFileSync(INDEX_HTML, 'utf8')
   assert.match(html, /const BASE = '\/plugins\/signalk-dead-mans-switch'/)

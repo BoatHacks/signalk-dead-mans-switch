@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="version" content="0.6.1" />
+<meta name="version" content="0.6.2" />
 <title>Dead Man's Switch</title>
 <style>
   /* ---------- theme variables (light default, dark override) ----------
@@ -140,6 +140,7 @@
   .state-title { font-size: 19px; font-weight: 700; line-height: 1.3; }
   .state-countdown { font-size: 14px; font-weight: 500; opacity: 0.9; }
   .state-cta { font-size: 13px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; opacity: 0.85; margin-top: 2px; }
+  .state-cta.emergency-cta { font-size: 32px; font-weight: 800; letter-spacing: 0.04em; opacity: 1; margin-top: 8px; }
 
   .progress-track {
     width: 100%;
@@ -207,7 +208,7 @@ const ACK_LABEL = {
   alert: 'Tap to acknowledge',
   warn: 'Tap to acknowledge',
   alarm: 'Tap to acknowledge',
-  emergency: 'Tap to acknowledge',
+  emergency: 'TAP HERE',
 }
 
 function stageColorVar(stage) {
@@ -488,7 +489,7 @@ function App() {
         html`<span class="state-countdown">${formatSeconds(remaining)} remaining</span>`}
         ${stage === 'emergency' &&
         html`<span class="state-countdown">No further auto-escalation</span>`}
-        <span class="state-cta">${ACK_LABEL[stage] || 'Tap to acknowledge'}</span>
+        <span class=${`state-cta ${stage === 'emergency' ? 'emergency-cta' : ''}`}>${ACK_LABEL[stage] || 'Tap to acknowledge'}</span>
       </button>
 
       <div class=${`progress-track ${connectionError ? 'stale' : ''}`}>

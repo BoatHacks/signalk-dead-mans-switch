@@ -19,6 +19,8 @@ All notable changes to this project will be documented in this file.
   loganzsound (Freesound.org), CC0 - see `public/audio/NOTICE.md`.
 
 ### Changed
+- Emergency's call-to-action text is now "TAP HERE" in much larger,
+  bolder letters instead of the usual "Tap to acknowledge".
 - Emergency blink is now much faster and sharper (hard flash + slight
   scale pulse, ~3.5x/sec) instead of a slow smooth fade, for a more
   urgent feel.
