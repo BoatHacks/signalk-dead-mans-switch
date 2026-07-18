@@ -38,9 +38,13 @@ display can pick this notification up with no special-casing.
 Two ways to ack:
 
 - **The companion webapp** (installed automatically, available from the
-  Signal K server's webapps list) - a big button showing the current
-  stage, a live countdown, and a pulsing "acknowledge" prompt once things
-  reach `alarm`/`emergency`.
+  Signal K server's webapps list) - a large state indicator showing the
+  current stage (colored by severity, with a blinking outline once
+  `emergency` is reached), a horizontal countdown bar for the current
+  stage's window, and an acknowledge button next to a disarm button.
+  Light/dark theme toggle in the corner, following the same palette
+  convention as `signalk-stowage-mgmt` (dark mode is deliberately
+  red-shifted to preserve night vision on watch).
 - **A REST call** to `POST /plugins/signalk-dead-mans-switch/ack` - handy
   for wiring up a physical hardware ack button (e.g. an ESP32 with a big
   panic-style pushbutton at the helm) instead of relying on a screen.

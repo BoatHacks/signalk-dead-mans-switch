@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Webapp redesign: removed the title bar; the current-state indicator is
+  now a dedicated (non-interactive) button, with a horizontal countdown
+  progress bar between it and the arm/reset button; the disarm button now
+  sits next to arm/reset instead of below it.
+- Added a light/dark theme toggle to the webapp, matching
+  `signalk-stowage-mgmt`'s palette convention (dark mode red-shifted for
+  night vision).
+- State-button coloring: yellow on `warn`, red on `alarm`, and a blinking
+  outline once escalated to `emergency`.
+
 ## [0.1.0] - 2026-07-18
 
 ### Added

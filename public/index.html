@@ -3,22 +3,61 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="version" content="0.1.0" />
+<meta name="version" content="0.2.0" />
 <title>Dead Man's Switch</title>
 <style>
+  /* ---------- theme variables (light default, dark override) ----------
+     Same palette/convention as signalk-stowage-mgmt: light mode uses an
+     ordinary neutral palette; dark mode is deliberately red-shifted (a
+     "night mode" that disturbs night-adapted vision far less than white/
+     blue/green light matters at least as much here as on that plugin -
+     this is the one you're staring at on an overnight watch). Stage
+     colors in dark mode stay within that same red family rather than
+     introducing a non-red hue, distinguished by shade/saturation instead
+     of hue - the countdown bar, blinking outline, and text label carry
+     the rest of the severity signal. */
   :root {
-    --bg: #10151b;
-    --panel: #1a222b;
-    --border: #2c3946;
-    --text: #e4ebf1;
-    --text-dim: #8ea0b0;
-    --armed: #3fa6e0;
-    --alert: #d9b53f;
-    --warn: #e08a3f;
-    --alarm: #e05656;
-    --emergency: #ff2b2b;
-    --disarmed: #5a6b7a;
+    --bg: #f5f4f1;
+    --surface: #fff;
+    --surface-alt: #f7f7f5;
+    --text: #22221f;
+    --text-muted: #888;
+    --border: #eee;
+    --border-strong: #ccc;
+    --accent: #2f6f2f;
+    --accent-hover: #275e27;
+    --on-accent-text: #fff;
+
+    --stage-disarmed: #9a9a94;
+    --stage-armed: #2f6f2f;
+    --stage-alert: #c98a1f;
+    --stage-warn: #e0b91a;
+    --stage-alarm: #c23b32;
+    --stage-emergency: #b91f1f;
+    --stage-emergency-blink: #ff4136;
   }
+
+  [data-theme="dark"] {
+    --bg: #16181c;
+    --surface: #21242a;
+    --surface-alt: #262a31;
+    --text: #d9776a;
+    --text-muted: #a15850;
+    --border: #3a2c29;
+    --border-strong: #4d332e;
+    --accent: #a8443a;
+    --accent-hover: #bd5347;
+    --on-accent-text: #fbdbd3;
+
+    --stage-disarmed: #6b4a44;
+    --stage-armed: #a8443a;
+    --stage-alert: #b8543f;
+    --stage-warn: #c2694f;
+    --stage-alarm: #e0574a;
+    --stage-emergency: #e0574a;
+    --stage-emergency-blink: #ff5c47;
+  }
+
   * { box-sizing: border-box; }
   html, body {
     margin: 0;
@@ -26,99 +65,120 @@
     font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
+    transition: background-color 0.15s ease, color 0.15s ease;
   }
-  header {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border);
-  }
-  header h1 { margin: 0; font-size: 20px; }
-  header p { margin: 4px 0 0; color: var(--text-dim); font-size: 13px; }
   main {
-    padding: 24px 20px 40px;
-    max-width: 520px;
+    padding: 60px 20px 40px;
+    max-width: 480px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 20px;
+    gap: 16px;
   }
-  .status-panel {
-    width: 100%;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
+
+  .theme-toggle {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .theme-toggle:hover { background: var(--surface-alt); }
+  .theme-toggle svg { width: 18px; height: 18px; }
+
+  .subtitle {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
     text-align: center;
   }
-  .stage-label {
-    font-size: 14px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    margin: 0 0 6px;
-  }
-  .stage-value {
-    font-size: 28px;
-    font-weight: 700;
-    margin: 0;
-  }
-  .countdown {
-    font-size: 15px;
-    color: var(--text-dim);
-    margin: 10px 0 0;
-  }
-  .message {
-    margin: 12px 0 0;
-    font-size: 14px;
-    color: var(--text);
-  }
-  button.ack {
+
+  /* "Current state" button - a display, not an action; styled as a big
+     button so its purpose (this is THE status) reads at a glance, but
+     not clickable - it exists to be looked at, not tapped. */
+  button.state-button {
     width: 100%;
-    max-width: 320px;
-    padding: 28px 20px;
-    font-size: 22px;
+    padding: 26px 18px;
+    font-size: 19px;
     font-weight: 700;
     border-radius: 16px;
-    border: none;
-    cursor: pointer;
-    color: #08131c;
-    background: var(--armed);
-    transition: background 0.2s ease, transform 0.05s ease;
+    border: 3px solid transparent;
+    cursor: default;
+    color: var(--on-accent-text);
+    text-align: center;
+    line-height: 1.35;
   }
-  button.ack:active { transform: scale(0.98); }
-  button.ack.pulse {
-    animation: pulse 1s ease-in-out infinite;
+  button.state-button.blink-outline {
+    animation: blink-outline 0.9s ease-in-out infinite;
   }
-  @keyframes pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 43, 43, 0.55); }
-    50% { box-shadow: 0 0 0 18px rgba(255, 43, 43, 0); }
+  @keyframes blink-outline {
+    0%, 100% { border-color: var(--stage-emergency-blink); }
+    50% { border-color: transparent; }
   }
-  .controls {
+
+  .progress-track {
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 1s linear, background-color 0.2s ease;
+  }
+
+  .action-row {
+    width: 100%;
     display: flex;
     gap: 10px;
   }
-  button.secondary {
-    background: var(--panel);
+  button.ack {
+    flex: 1;
+    padding: 20px 16px;
+    font-size: 17px;
+    font-weight: 700;
+    border-radius: 14px;
+    border: none;
+    cursor: pointer;
+    color: var(--on-accent-text);
+    background: var(--accent);
+    transition: background 0.2s ease, transform 0.05s ease;
+  }
+  button.ack:active { transform: scale(0.98); }
+  button.disarm-btn {
+    flex: 0 0 auto;
+    padding: 20px 18px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 14px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
     color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 16px;
-    font-size: 13px;
     cursor: pointer;
   }
+  button.disarm-btn:hover { background: var(--surface-alt); }
+
   .error-banner {
     width: 100%;
-    background: rgba(224, 86, 86, 0.15);
-    border: 1px solid var(--alarm);
-    color: var(--alarm);
+    background: color-mix(in srgb, var(--stage-alarm) 15%, var(--surface));
+    border: 1px solid var(--stage-alarm);
+    color: var(--stage-alarm);
     border-radius: 8px;
     padding: 10px 14px;
     font-size: 13px;
   }
-  .disarmed-note {
-    color: var(--text-dim);
-    font-size: 13px;
-  }
+  .loading-note { color: var(--text-muted); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -131,15 +191,7 @@ import { render, html, useState, useEffect, useRef } from './vendor/htm-preact-s
 // (this page) are served from under the signalk-webapp convention - so
 // this must be a fixed absolute path, not derived from window.location.
 const BASE = '/plugins/signalk-dead-mans-switch'
-
-const STAGE_COLOR = {
-  disarmed: 'var(--disarmed)',
-  armed: 'var(--armed)',
-  alert: 'var(--alert)',
-  warn: 'var(--warn)',
-  alarm: 'var(--alarm)',
-  emergency: 'var(--emergency)',
-}
+const THEME_STORAGE_KEY = 'deadmansswitch-theme'
 
 const STAGE_TITLE = {
   disarmed: 'Disarmed',
@@ -152,24 +204,77 @@ const STAGE_TITLE = {
 
 const ACK_LABEL = {
   disarmed: 'Arm',
-  armed: 'I\u2019m here (reset timer)',
+  armed: 'I\u2019m here (reset)',
   alert: 'ACKNOWLEDGE',
   warn: 'ACKNOWLEDGE',
   alarm: 'ACKNOWLEDGE',
   emergency: 'ACKNOWLEDGE',
 }
 
-function formatSeconds(s) {
-  if (s === null || s === undefined) return null
-  const m = Math.floor(s / 60)
-  const sec = s % 60
-  return m > 0 ? `${m}m ${sec}s` : `${sec}s`
+function stageColorVar(stage) {
+  return `var(--stage-${stage || 'disarmed'})`
+}
+
+// Total duration (seconds) of whatever window the current stage is
+// counting down within, so the progress bar can render a proportion
+// rather than just an absolute number.
+function stageTotalSeconds(stage, config) {
+  if (stage === 'armed') return config.checkIntervalMinutes * 60
+  if (stage === 'alert') return config.ackWindowSeconds
+  if (stage === 'warn') return config.warnWindowSeconds
+  if (stage === 'alarm') return config.alarmWindowSeconds
+  return null // disarmed / emergency: no countdown
+}
+
+function SunIcon() {
+  return html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <circle cx="12" cy="12" r="4.5" />
+    <path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8l1.8-1.8M18 6l1.8-1.8" />
+  </svg>`
+}
+function MoonIcon() {
+  return html`<svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z" />
+  </svg>`
+}
+
+function getPreferredTheme() {
+  let stored = null
+  try {
+    stored = window.localStorage.getItem(THEME_STORAGE_KEY)
+  } catch (err) {
+    // localStorage can throw in some restricted/embedded browsers - fall
+    // through to the OS preference in that case.
+  }
+  if (stored === 'light' || stored === 'dark') return stored
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  return prefersDark ? 'dark' : 'light'
+}
+
+function ThemeToggle({ theme, setTheme }) {
+  const label = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
+  return html`
+    <button type="button" class="theme-toggle" title=${label} aria-label=${label}
+      onClick=${() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+      ${theme === 'dark' ? html`<${SunIcon} />` : html`<${MoonIcon} />`}
+    </button>
+  `
 }
 
 function App() {
   const [status, setStatus] = useState(null)
   const [error, setError] = useState(null)
+  const [theme, setTheme] = useState(getPreferredTheme())
   const pollRef = useRef(null)
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+    } catch (err) {
+      // ignore - theme just won't persist across reloads on this browser
+    }
+  }, [theme])
 
   // fetch() only rejects on a network-level failure, NOT on an HTTP error
   // status - without this check a 404 from a wrong path would silently
@@ -212,42 +317,48 @@ function App() {
   }
 
   if (!status) {
-    return html`<main><p class="disarmed-note">Loading\u2026</p></main>`
+    return html`
+      <${ThemeToggle} theme=${theme} setTheme=${setTheme} />
+      <main><p class="loading-note">Loading\u2026</p></main>
+    `
   }
 
   const stage = status.state
-  const color = STAGE_COLOR[stage] || 'var(--armed)'
-  const isEscalated = ['alert', 'warn', 'alarm', 'emergency'].includes(stage)
-  const remaining = formatSeconds(status.secondsRemaining)
+  const color = stageColorVar(stage)
+  const totalSeconds = stageTotalSeconds(stage, status.config || {})
+  const remaining = status.secondsRemaining
+  // Emergency has no deadline (terminal) - render the bar full rather than
+  // hiding it, so the layout doesn't jump when the top stage is reached.
+  const fillPct =
+    stage === 'emergency'
+      ? 100
+      : totalSeconds && remaining !== null
+      ? Math.max(0, Math.min(100, (remaining / totalSeconds) * 100))
+      : 0
 
   return html`
-    <header>
-      <h1>Dead Man's Switch</h1>
-      <p>Check in periodically, or the watch alarm escalates.</p>
-    </header>
+    <${ThemeToggle} theme=${theme} setTheme=${setTheme} />
     <main>
       ${error && html`<div class="error-banner">${error}</div>`}
-      <div class="status-panel" style=${{ borderColor: color }}>
-        <p class="stage-label">Current state</p>
-        <p class="stage-value" style=${{ color }}>${STAGE_TITLE[stage] || stage}</p>
-        ${remaining !== null &&
-        html`<p class="countdown">
-          ${isEscalated ? 'Escalates in ' : 'Next check-in in '}${remaining}
-        </p>`}
-        ${stage === 'emergency' &&
-        html`<p class="countdown">No further auto-escalation \u2013 acknowledge to reset.</p>`}
-        ${stage === 'disarmed' && html`<p class="countdown">Switch is disarmed.</p>`}
-      </div>
+
       <button
-        class=${`ack ${stage === 'alarm' || stage === 'emergency' ? 'pulse' : ''}`}
-        style=${{ background: stage === 'disarmed' ? 'var(--armed)' : color }}
-        onClick=${handleAckButton}
+        class=${`state-button ${stage === 'emergency' ? 'blink-outline' : ''}`}
+        style=${{ background: color }}
+        disabled
       >
-        ${ACK_LABEL[stage] || 'ACKNOWLEDGE'}
+        ${STAGE_TITLE[stage] || stage}
       </button>
-      <div class="controls">
+
+      <div class="progress-track">
+        <div class="progress-fill" style=${{ width: `${fillPct}%`, background: color }}></div>
+      </div>
+
+      <div class="action-row">
+        <button class="ack" style=${{ background: stage === 'disarmed' ? 'var(--accent)' : color }} onClick=${handleAckButton}>
+          ${ACK_LABEL[stage] || 'ACKNOWLEDGE'}
+        </button>
         ${stage !== 'disarmed' &&
-        html`<button class="secondary" onClick=${() => post('/disarm')}>Disarm</button>`}
+        html`<button class="disarm-btn" onClick=${() => post('/disarm')}>Disarm</button>`}
       </div>
     </main>
   `
