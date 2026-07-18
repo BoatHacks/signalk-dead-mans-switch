@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Merged the state display and the ack/arm button into a single button:
+  it now shows the stage, the remaining time in that stage's window, and
+  doubles as the tap-to-acknowledge/tap-to-arm action.
+- Progress bar now fills (grows toward 100% as the deadline approaches)
+  instead of draining.
+- Moved the disarm button out of the action row and into the top
+  toolbar, next to the theme toggle.
 - Disarm now asks for confirmation (native `confirm()`, matching the
   convention used for destructive actions in his other plugins) before
   actually disarming.

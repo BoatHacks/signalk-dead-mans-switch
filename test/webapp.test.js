@@ -18,6 +18,8 @@ test('webapp has no title bar/header element', () => {
   assert.doesNotMatch(html, /<header[\s>]/)
 })
 
+const DEFAULT_CONFIG = { checkIntervalMinutes: 15, ackWindowSeconds: 90, warnWindowSeconds: 60, alarmWindowSeconds: 60 }
+
 async function statusFetch(state, secondsRemaining, config) {
   return async (url) => {
     if (String(url).endsWith('/status')) {
@@ -30,7 +32,7 @@ async function statusFetch(state, secondsRemaining, config) {
           secondsRemaining,
           deadlineAt: secondsRemaining !== null ? Date.now() + secondsRemaining * 1000 : null,
           notificationPath: 'notifications.security.deadmansswitch',
-          config: config || { checkIntervalMinutes: 15, ackWindowSeconds: 90, warnWindowSeconds: 60, alarmWindowSeconds: 60 },
+          config: config || DEFAULT_CONFIG,
         }),
       }
     }
@@ -38,20 +40,30 @@ async function statusFetch(state, secondsRemaining, config) {
   }
 }
 
-test('webapp renders the current state as a disabled state-button', async (t) => {
-  const fetchImpl = await statusFetch('alert', 42, { checkIntervalMinutes: 15, ackWindowSeconds: 90, warnWindowSeconds: 60, alarmWindowSeconds: 60 })
+test('the merged state button shows both the stage and remaining time while armed', async (t) => {
+  const fetchImpl = await statusFetch('armed', 754, DEFAULT_CONFIG) // 12m 34s
   const { doc, unmount } = await mountWebapp(fetchImpl)
   t.after(unmount)
 
   const stateBtn = doc.querySelector('button.state-button')
   assert.ok(stateBtn, 'state-button should be present')
-  assert.match(stateBtn.textContent, /Alert/)
-  assert.equal(stateBtn.disabled, true)
+  assert.match(stateBtn.textContent, /Armed/)
+  assert.match(stateBtn.textContent, /12m 34s remaining/)
 })
 
-test('progress bar fill reflects remaining fraction of the current stage window', async (t) => {
-  // alert stage, ackWindowSeconds=90, 45s remaining -> 50% fill
-  const fetchImpl = await statusFetch('alert', 45, { checkIntervalMinutes: 15, ackWindowSeconds: 90, warnWindowSeconds: 60, alarmWindowSeconds: 60 })
+test('the merged state button shows remaining time while escalated too', async (t) => {
+  const fetchImpl = await statusFetch('alert', 42, DEFAULT_CONFIG)
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  const stateBtn = doc.querySelector('button.state-button')
+  assert.match(stateBtn.textContent, /Alert/)
+  assert.match(stateBtn.textContent, /42s remaining/)
+})
+
+test('progress bar fills (grows) as time elapses, rather than draining', async (t) => {
+  // alert stage, ackWindowSeconds=90, 45s remaining -> half elapsed -> 50% fill
+  const fetchImpl = await statusFetch('alert', 45, DEFAULT_CONFIG)
   const { doc, unmount } = await mountWebapp(fetchImpl)
   t.after(unmount)
 
@@ -60,8 +72,19 @@ test('progress bar fill reflects remaining fraction of the current stage window'
   assert.equal(fill.style.width, '50%')
 })
 
+test('progress bar grows further as remaining time shrinks (fill direction, not drain)', async (t) => {
+  // 90s window, 10s remaining -> 80/90 elapsed -> ~88.9% fill (high, not low)
+  const fetchImpl = await statusFetch('alert', 10, DEFAULT_CONFIG)
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  const fill = doc.querySelector('.progress-fill')
+  const pct = parseFloat(fill.style.width)
+  assert.ok(pct > 80, `expected a high fill percentage near the deadline, got ${pct}%`)
+})
+
 test('progress bar is full and state-button blinks its outline in emergency', async (t) => {
-  const fetchImpl = await statusFetch('emergency', null, { checkIntervalMinutes: 15, ackWindowSeconds: 90, warnWindowSeconds: 60, alarmWindowSeconds: 60 })
+  const fetchImpl = await statusFetch('emergency', null, DEFAULT_CONFIG)
   const { doc, unmount } = await mountWebapp(fetchImpl)
   t.after(unmount)
 
@@ -71,22 +94,21 @@ test('progress bar is full and state-button blinks its outline in emergency', as
   assert.ok(stateBtn.classList.contains('blink-outline'))
 })
 
-test('disarm button sits next to the ack button, hidden while disarmed', async (t) => {
+test('disarm button sits in the top toolbar next to the theme toggle, hidden while disarmed', async (t) => {
   const fetchImplDisarmed = await statusFetch('disarmed', null, {})
   const { doc: doc1, unmount: unmount1 } = await mountWebapp(fetchImplDisarmed)
-  assert.equal(doc1.querySelector('button.disarm-btn'), undefined || doc1.querySelector('button.disarm-btn'))
   assert.ok(!doc1.querySelector('button.disarm-btn'), 'no disarm button while disarmed')
   unmount1()
 
-  const fetchImplArmed = await statusFetch('armed', 900, { checkIntervalMinutes: 15, ackWindowSeconds: 90, warnWindowSeconds: 60, alarmWindowSeconds: 60 })
+  const fetchImplArmed = await statusFetch('armed', 900, DEFAULT_CONFIG)
   const { doc: doc2, unmount: unmount2 } = await mountWebapp(fetchImplArmed)
-  const row = doc2.querySelector('.action-row')
-  assert.ok(row.querySelector('button.ack'))
-  assert.ok(row.querySelector('button.disarm-btn'))
+  const toolbar = doc2.querySelector('.toolbar')
+  assert.ok(toolbar.querySelector('button.disarm-btn'))
+  assert.ok(toolbar.querySelector('button.theme-toggle'))
   unmount2()
 })
 
-test('clicking the ack button POSTs to /ack', async (t) => {
+test('clicking the merged state button POSTs to /ack while armed/escalated', async (t) => {
   const calls = []
   const fetchImpl = async (url, opts) => {
     calls.push({ url: String(url), method: (opts && opts.method) || 'GET' })
@@ -100,7 +122,7 @@ test('clicking the ack button POSTs to /ack', async (t) => {
           secondsRemaining: 15,
           deadlineAt: Date.now() + 15000,
           notificationPath: 'notifications.security.deadmansswitch',
-          config: { checkIntervalMinutes: 15, ackWindowSeconds: 90, warnWindowSeconds: 60, alarmWindowSeconds: 60 },
+          config: DEFAULT_CONFIG,
         }),
       }
     }
@@ -110,8 +132,8 @@ test('clicking the ack button POSTs to /ack', async (t) => {
   const { doc, unmount } = await mountWebapp(fetchImpl)
   t.after(unmount)
 
-  const button = doc.querySelector('button.ack')
-  assert.ok(button, 'ack button should be present')
+  const button = doc.querySelector('button.state-button')
+  assert.ok(button, 'state button should be present')
   button.dispatchEvent(new Event('click', { bubbles: true }))
 
   await new Promise((resolve) => setTimeout(resolve, 50))
@@ -122,18 +144,38 @@ test('clicking the ack button POSTs to /ack', async (t) => {
   )
 })
 
-test('theme toggle button is present and flips data-theme on the document', async (t) => {
-  const fetchImpl = await statusFetch('armed', 900, { checkIntervalMinutes: 15, ackWindowSeconds: 90, warnWindowSeconds: 60, alarmWindowSeconds: 60 })
+test('clicking the merged state button POSTs to /arm while disarmed', async (t) => {
+  const calls = []
+  const fetchImpl = async (url, opts) => {
+    calls.push({ url: String(url), method: (opts && opts.method) || 'GET' })
+    if (String(url).endsWith('/status')) {
+      return {
+        ok: true,
+        status: 200,
+        url,
+        json: async () => ({
+          state: 'disarmed',
+          secondsRemaining: null,
+          deadlineAt: null,
+          notificationPath: 'notifications.security.deadmansswitch',
+          config: {},
+        }),
+      }
+    }
+    return { ok: true, status: 200, url, json: async () => ({ ok: true }) }
+  }
+
   const { doc, unmount } = await mountWebapp(fetchImpl)
   t.after(unmount)
 
-  const toggle = doc.querySelector('button.theme-toggle')
-  assert.ok(toggle, 'theme toggle button should be present')
-  const before = doc.documentElement.getAttribute('data-theme')
-  toggle.dispatchEvent(new Event('click', { bubbles: true }))
-  await new Promise((resolve) => setTimeout(resolve, 150))
-  const after = doc.documentElement.getAttribute('data-theme')
-  assert.notEqual(before, after)
+  const button = doc.querySelector('button.state-button')
+  button.dispatchEvent(new Event('click', { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 50))
+
+  assert.ok(
+    calls.some((c) => c.url.endsWith('/arm') && c.method === 'POST'),
+    `expected a POST to /arm, got: ${JSON.stringify(calls)}`
+  )
 })
 
 test('disarm button asks for confirmation before POSTing to /disarm', async (t) => {
@@ -150,7 +192,7 @@ test('disarm button asks for confirmation before POSTing to /disarm', async (t) 
           secondsRemaining: 900,
           deadlineAt: Date.now() + 900000,
           notificationPath: 'notifications.security.deadmansswitch',
-          config: { checkIntervalMinutes: 15, ackWindowSeconds: 90, warnWindowSeconds: 60, alarmWindowSeconds: 60 },
+          config: DEFAULT_CONFIG,
         }),
       }
     }
@@ -163,13 +205,11 @@ test('disarm button asks for confirmation before POSTing to /disarm', async (t) 
   const button = doc.querySelector('button.disarm-btn')
   assert.ok(button, 'disarm button should be present')
 
-  // Declining the confirmation must not send the request.
   dom.window.confirm = () => false
   button.dispatchEvent(new Event('click', { bubbles: true }))
   await new Promise((resolve) => setTimeout(resolve, 50))
   assert.ok(!calls.some((c) => c.url.endsWith('/disarm')), 'no /disarm call after declining confirmation')
 
-  // Accepting it does send the request.
   dom.window.confirm = () => true
   button.dispatchEvent(new Event('click', { bubbles: true }))
   await new Promise((resolve) => setTimeout(resolve, 50))
@@ -177,6 +217,20 @@ test('disarm button asks for confirmation before POSTing to /disarm', async (t) 
     calls.some((c) => c.url.endsWith('/disarm') && c.method === 'POST'),
     `expected a POST to /disarm after accepting confirmation, got: ${JSON.stringify(calls)}`
   )
+})
+
+test('theme toggle button is present and flips data-theme on the document', async (t) => {
+  const fetchImpl = await statusFetch('armed', 900, DEFAULT_CONFIG)
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  const toggle = doc.querySelector('button.theme-toggle')
+  assert.ok(toggle, 'theme toggle button should be present')
+  const before = doc.documentElement.getAttribute('data-theme')
+  toggle.dispatchEvent(new Event('click', { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 150))
+  const after = doc.documentElement.getAttribute('data-theme')
+  assert.notEqual(before, after)
 })
 
 test('BASE is a fixed absolute /plugins/<id> path, not derived from window.location', () => {
