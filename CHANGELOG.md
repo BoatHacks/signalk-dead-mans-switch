@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-18
+
 ### Fixed
 - Hardened acknowledging against a self-echo reentrancy hazard: on a real
   server, our own notification writes (during arm/ack/disarm) can be
