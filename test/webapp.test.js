@@ -450,6 +450,28 @@ test('package.json declares the SignalK app icon for the admin UI app list', () 
   assert.equal(pkg.signalk && pkg.signalk.appIcon, './assets/icons/icon-512.png')
 })
 
+test('package.json declares app-store screenshots for armed/warn/emergency, and the files exist at 640x480', () => {
+  const repoRoot = path.join(PUBLIC_DIR, '..')
+  const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))
+  const screenshots = (pkg.signalk && pkg.signalk.screenshots) || []
+  assert.deepEqual(screenshots, [
+    './docs/screenshots/armed.png',
+    './docs/screenshots/warn.png',
+    './docs/screenshots/emergency.png',
+  ])
+  for (const rel of screenshots) {
+    const filePath = path.join(repoRoot, rel)
+    assert.ok(fs.existsSync(filePath), `${rel} should exist`)
+    // Minimal PNG IHDR parse: width/height are 4-byte big-endian ints at
+    // fixed offsets 16 and 20.
+    const buf = fs.readFileSync(filePath)
+    const width = buf.readUInt32BE(16)
+    const height = buf.readUInt32BE(20)
+    assert.equal(width, 640, `${rel} width`)
+    assert.equal(height, 480, `${rel} height`)
+  }
+})
+
 test('BASE is a fixed absolute /plugins/<id> path, not derived from window.location', () => {
   const html = fs.readFileSync(INDEX_HTML, 'utf8')
   assert.match(html, /const BASE = '\/plugins\/signalk-dead-mans-switch'/)

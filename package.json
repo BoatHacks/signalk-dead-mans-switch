@@ -15,7 +15,12 @@
   "signalk-plugin-enabled-by-default": false,
   "signalk": {
     "displayName": "Dead Man's Switch",
-    "appIcon": "./assets/icons/icon-512.png"
+    "appIcon": "./assets/icons/icon-512.png",
+    "screenshots": [
+      "./docs/screenshots/armed.png",
+      "./docs/screenshots/warn.png",
+      "./docs/screenshots/emergency.png"
+    ]
   },
   "author": "Tobias Rosenstock (humppafreak)",
   "license": "MIT",
