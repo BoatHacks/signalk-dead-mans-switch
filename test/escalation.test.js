@@ -33,6 +33,13 @@ test('raises "alert" once the check-in interval elapses', (t) => {
   assert.equal(value.state, 'alert')
 })
 
+test('published notifications always have canSilence: false - silencing alone must never count as a check-in', (t) => {
+  const { app } = setup(t)
+  t.mock.timers.tick(60_000)
+  const value = app.lastValueFor('notifications.security.deadmansswitch')
+  assert.equal(value.canSilence, false)
+})
+
 test('escalates alert -> warn -> alarm -> emergency if never acknowledged', (t) => {
   const { app } = setup(t)
   t.mock.timers.tick(60_000) // interval elapses -> alert

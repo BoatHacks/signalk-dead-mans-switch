@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Acknowledging from Freeboard (and any other client using SignalK's v2
+  Notifications API) now actually works. That API's acknowledge action
+  does NOT clear the notification or change its `state` - per spec it
+  strips `"sound"` from the `method` array instead (and, for
+  `state: "emergency"`, only `"sound"` - `"visual"` stays). The switch
+  previously only looked at `state`/clearing to detect an acknowledgement,
+  so a v2 acknowledge was misread as "the same stage being written again"
+  and just refreshed that stage's timer instead of resetting all the way
+  back to armed. Now detected directly by `method` no longer including
+  `"sound"`, checked before stage-matching, for both regular stages and
+  the emergency special case.
+
+### Changed
+- Published notifications now include `canSilence: false` - silencing
+  alone (muting sound without truly checking in) must never be mistaken
+  for an acknowledgement.
+
 ## [0.3.0] - 2026-07-18
 
 ### Fixed

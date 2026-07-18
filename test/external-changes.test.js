@@ -165,3 +165,56 @@ test('acknowledging from any stage always results in "armed" with a full-length 
     plugin.stop()
   }
 })
+
+// SignalK's v2 Notifications API acknowledge action
+// (POST /signalk/v2/api/notifications/{id}/acknowledge) - what clients
+// like Freeboard's "Acknowledge" button actually call - does NOT clear
+// the notification or change its state. Per spec it strips "sound" from
+// the `method` array (and ONLY "sound" when state is "emergency" -
+// "visual" stays). These tests simulate exactly that shape of delta.
+
+test('a v2-API acknowledge (method loses "sound", state unchanged) is treated as an acknowledgement', (t) => {
+  const { app, plugin } = setup(t)
+  const { makeFakeRouter } = require('../test-support/fake-app')
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+
+  t.mock.timers.tick(60_000) // -> alert
+  assert.equal(app.lastValueFor(PATH).state, 'alert')
+
+  // Same state, but "sound" has been stripped from method - this is what
+  // a real server does in response to a v2 acknowledge request, NOT a
+  // cleared value and NOT a state change.
+  app._emitExternalDelta(PATH, { state: 'alert', method: ['visual'], message: 'Are you there?' })
+
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.body.state, 'armed', 'must reset all the way to armed, not just refresh the alert timer')
+  assert.equal(res.body.secondsRemaining, 60)
+})
+
+test('a v2-API acknowledge from "emergency" (only "sound" removed, "visual" stays) is still treated as an acknowledgement', (t) => {
+  const { app, plugin } = setup(t)
+  const { makeFakeRouter } = require('../test-support/fake-app')
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+
+  t.mock.timers.tick(60_000)
+  t.mock.timers.tick(30_000)
+  t.mock.timers.tick(20_000)
+  t.mock.timers.tick(10_000)
+  assert.equal(app.lastValueFor(PATH).state, 'emergency')
+
+  // Per spec, emergency acknowledgement only strips "sound", leaving
+  // "visual" in place - this must still count as an acknowledgement.
+  app._emitExternalDelta(PATH, { state: 'emergency', method: ['visual'], message: 'Watch incapacitated!' })
+
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.body.state, 'armed')
+})
+
+test('a delta with "sound" still present in method is NOT treated as an acknowledgement (still matched as a stage write)', (t) => {
+  const { app } = setup(t)
+  t.mock.timers.tick(60_000) // -> alert
+  app._emitExternalDelta(PATH, { state: 'warn', method: ['visual', 'sound'] })
+  assert.equal(app.lastValueFor(PATH).state, 'warn', 'sound still present - should be read as an external stage write, not an ack')
+})

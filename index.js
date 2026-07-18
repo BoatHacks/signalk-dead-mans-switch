@@ -104,6 +104,13 @@ module.exports = function (app) {
                   message: STAGE_MESSAGE[stage],
                   method: ['visual', 'sound'],
                   timestamp: new Date().toISOString(),
+                  // The whole point of this switch is that "I muted the
+                  // sound" must never be mistaken for "a human is
+                  // present" - silencing alone would let it go quiet
+                  // while nobody has actually checked in. Acknowledging
+                  // (which does properly reset the switch - see below)
+                  // remains available.
+                  canSilence: false,
                 },
               },
             ],
@@ -196,9 +203,23 @@ module.exports = function (app) {
   // webapp report - would otherwise drift out of sync with the actual
   // notification, silently, until the next scheduled timer fires. Instead,
   // we subscribe to the path ourselves and reconcile immediately:
+  //   - an acknowledgement via SignalK's own v2 Notifications API
+  //     (POST /signalk/v2/api/notifications/{id}/acknowledge, which is
+  //     what clients like Freeboard's "Acknowledge" button actually call)
+  //     is treated the same as our own /ack. Importantly, that action does
+  //     NOT clear the notification or change its `state` - per the SignalK
+  //     spec it strips "sound" from the `method` array instead (and, for
+  //     state=emergency specifically, ONLY "sound" - "visual" stays). So
+  //     detecting this can't rely on state/value at all; it's recognized
+  //     by `method` no longer including "sound" while a stage is still
+  //     set. Watch for this BEFORE the stage-matching check below, since
+  //     an acknowledged-but-still-escalated delta would otherwise look
+  //     like "the same stage being written again" and just restart that
+  //     stage's timer instead of resetting all the way back to armed.
   //   - a stage value (alert/warn/alarm/emergency) written externally
-  //     snaps our state machine to that stage, exactly as if we'd
-  //     escalated to it ourselves, with a freshly-started window
+  //     (with sound still present in method) snaps our state machine to
+  //     that stage, exactly as if we'd escalated to it ourselves, with a
+  //     freshly-started window
   //   - the notification being cleared, or set to any non-stage value,
   //     while we're currently armed/escalated is treated as an external
   //     acknowledgement - same effect as our own /ack
@@ -207,8 +228,8 @@ module.exports = function (app) {
   //     is none of our business until re-armed
   // Deltas WE published (via publishNotification/clearNotification above)
   // come back through this same subscription like any other - they are
-  // recognized by $source being our own plugin.id and ignored, so we
-  // don't re-process our own writes or create a feedback loop.
+  // recognized (see isOwnDelta below) and ignored, so we don't re-process
+  // our own writes or create a feedback loop.
   let unsubscribeExternal = null
 
   function isOwnDelta(delta) {
@@ -219,7 +240,16 @@ module.exports = function (app) {
     if (isOwnDelta(delta)) return
     if (state === 'disarmed') return
 
-    const externalState = delta && delta.value && delta.value.state
+    const value = delta && delta.value
+    const externalState = value && value.state
+    const method = value && value.method
+    const acknowledgedViaMethod = Array.isArray(method) && !method.includes('sound')
+
+    if (acknowledgedViaMethod) {
+      arm()
+      return
+    }
+
     const stageIndex = STAGES.indexOf(externalState)
 
     if (stageIndex !== -1) {

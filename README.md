@@ -111,11 +111,22 @@ or a device publishing straight to SignalK:
 - writing one of the escalation states (`alert`/`warn`/`alarm`/
   `emergency`) snaps the switch to that stage, with a freshly-started
   window for it - exactly as if the switch had escalated there itself
+- an acknowledgement via SignalK's own v2 Notifications API (`POST
+  /signalk/v2/api/notifications/{id}/acknowledge`, which is what clients
+  like Freeboard's "Acknowledge" button actually call) resets the switch
+  the same as calling `/ack`. That action doesn't clear the notification
+  or change `state` - it strips `"sound"` from `method` instead (only
+  `"sound"` when `state` is `emergency`) - so this is detected by that
+  signal specifically, not by state or clearing
 - clearing the notification, or writing any other state (e.g.
   `normal`), while the switch is armed or escalated is treated as an
   external acknowledgement - same effect as calling `/ack`
 - while disarmed, external changes on the path are ignored entirely -
   a disarmed switch isn't managing it
+
+Published notifications also set `canSilence: false` - silencing alone
+(muting sound without truly checking in) must never be mistaken for an
+acknowledgement.
 
 Deltas the plugin publishes itself are recognized (by source) and
 never reprocessed, so this can't create a feedback loop. The REST API
