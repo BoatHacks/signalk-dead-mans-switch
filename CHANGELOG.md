@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-18
+
 ### Fixed
 - The poll fallback (added just above) had a bug of its own, caught via
   debug logging on a real server: some servers keep `status.acknowledged:

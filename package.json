@@ -1,6 +1,6 @@
 {
   "name": "signalk-dead-mans-switch",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "The dead man's switch requires you to push a button, and escalates notifications from alert all the way up to emergency if you don't",
   "main": "index.js",
   "scripts": {
