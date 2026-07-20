@@ -591,5 +591,11 @@ test('embedded mode CSS hides the toolbar, transparent background, and fills the
   assert.match(html, /\[data-embedded\][^{]*\{[^}]*background:\s*transparent/)
   assert.match(html, /\[data-embedded\]\s*\.toolbar\s*\{\s*display:\s*none/)
   assert.match(html, /\[data-embedded\]\s*#app\s*\{\s*height:\s*100%/)
-  assert.match(html, /\[data-embedded\]\s*\.progress-track\s*\{\s*display:\s*none/)
+})
+
+test('embedded mode overlays the progress bar inside the button rather than hiding it', () => {
+  const html = fs.readFileSync(INDEX_HTML, 'utf8')
+  assert.match(html, /\[data-embedded\]\s*\.progress-track\s*\{[^}]*position:\s*absolute/)
+  // Not hidden anymore.
+  assert.doesNotMatch(html, /\[data-embedded\]\s*\.progress-track\s*\{\s*display:\s*none/)
 })

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="version" content="0.5.0" />
+<meta name="version" content="0.5.1" />
 <link rel="icon" type="image/png" href="assets/icons/icon-512.png">
 <title>Dead Man's Switch</title>
 <style>
@@ -194,10 +194,12 @@
   /* ---------- embedded mode (?embedded=true) ----------
      For hosting inside an iframe on a dashboard: transparent page
      background, no toolbar (arm/disarm + theme controls), and the state
-     button grows to fill the whole viewport. The progress bar is dropped
-     (the button IS the page); the connection-lost banner overlays the top
-     of the button instead of pushing it down, so the stale warning is
-     still visible without breaking the full-page layout. */
+     button grows to fill the whole viewport. The progress bar is
+     overlaid near the bottom of the button itself (the button IS the
+     page, so there's no room for it as a separate element); the
+     connection-lost banner overlays the top of the button instead of
+     pushing it down, so the stale warning is still visible without
+     breaking the full-page layout. */
   [data-embedded],
   [data-embedded] body {
     background: transparent;
@@ -220,8 +222,30 @@
     flex: 1;
     height: 100%;
     justify-content: center;
+    /* Room at the bottom for the progress bar overlaid on top of it -
+       see .progress-track below. */
+    padding-bottom: 40px;
   }
-  [data-embedded] .progress-track { display: none; }
+  /* Overlaid on the bottom of the button (main is position:relative and
+     the button already fills its full height, so anchoring to main's
+     edges lines this up with the button's own bottom edge) rather than
+     sitting as its own bar beneath it - there's no room for a separate
+     element once the button fills the whole viewport. Neutral
+     translucent colors (not the stage color used elsewhere) since the
+     button's own background is whatever saturated stage color is
+     currently active - a same-color fill would disappear into it. */
+  [data-embedded] .progress-track {
+    position: absolute;
+    left: 24px;
+    right: 24px;
+    bottom: 24px;
+    z-index: 1;
+    background: rgba(0, 0, 0, 0.22);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+  [data-embedded] .progress-fill {
+    background: rgba(255, 255, 255, 0.55) !important;
+  }
   [data-embedded] .connection-banner {
     position: absolute;
     top: 0;

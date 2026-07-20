@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- In embedded mode (`?embedded=true`), the progress bar is now overlaid
+  near the bottom of the button itself instead of being hidden - neutral
+  translucent colors rather than the stage color (which would disappear
+  into the button's own matching background).
+
 ### Added
 - New **Automatically switch light/dark theme based on sun position**
   config option (off by default). When on, the webapp follows
