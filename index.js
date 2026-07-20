@@ -145,6 +145,62 @@ module.exports = function (app) {
     return raw
   }
 
+  // Generic version of the unwrap above, for plain leaf values (a bare
+  // string, not a notification-shaped object) - app.getSelfPath() may
+  // return either the raw value or the full tree node ({value, timestamp,
+  // $source}) wrapping it, depending on server version.
+  function unwrapPlainValue(raw) {
+    if (raw && typeof raw === 'object' && 'value' in raw) return raw.value
+    return raw
+  }
+
+  // "day" is the only phase/mode we treat as light - everything else
+  // (dawn/sunrise/sunset/dusk/night for environment.sun; anything other
+  // than "day" for the simpler environment.mode) is treated as dark. The
+  // point is protecting night vision, which matters from dusk through
+  // dawn, not just once it's fully dark - matching why the dark theme
+  // itself is red-shifted rather than just "the same UI but dimmer".
+  const SUN_DARK_PHASES = new Set(['dawn', 'sunrise', 'sunset', 'dusk', 'night'])
+
+  // Recommends 'light' or 'dark' for the webapp's theme, or null if the
+  // "Automatically switch theme" option is off, no host support for
+  // reading paths synchronously, or neither environment.sun nor
+  // environment.mode has a recognized value yet. environment.sun (set by
+  // signalk-derived-data to one of dawn/sunrise/day/sunset/dusk/night) is
+  // preferred for its finer-grained twilight awareness; environment.mode
+  // (a simpler day/night string some setups use instead) is the fallback.
+  // Read fresh on every /status call rather than maintained via a
+  // subscription - status is already polled every ~1s by the webapp, so a
+  // separate push mechanism would add complexity without adding
+  // responsiveness that matters here.
+  function computeThemeRecommendation() {
+    if (!config('autoTheme', false)) return null
+    if (typeof app.getSelfPath !== 'function') return null
+
+    let sun
+    try {
+      sun = unwrapPlainValue(app.getSelfPath('environment.sun'))
+    } catch (err) {
+      sun = undefined
+    }
+    if (sun === 'day') return 'light'
+    if (SUN_DARK_PHASES.has(sun)) return 'dark'
+
+    let mode
+    try {
+      mode = unwrapPlainValue(app.getSelfPath('environment.mode'))
+    } catch (err) {
+      mode = undefined
+    }
+    if (typeof mode === 'string') {
+      const normalized = mode.toLowerCase()
+      if (normalized === 'day') return 'light'
+      if (normalized === 'night') return 'dark'
+    }
+
+    return null
+  }
+
   // Tracks the significant fields of whatever we most recently reconciled
   // against (our own last publish, or the last external change already
   // acted on) - see pollForExternalChange() below.
@@ -550,6 +606,13 @@ module.exports = function (app) {
           'The companion webapp plays a siren at emergency and a repeating alert sound at alarm. Uncheck to disable audio in the webapp entirely - useful if this notification is already wired into a dedicated alarm system and the browser sounds would just be redundant/annoying.',
         default: true,
       },
+      autoTheme: {
+        type: 'boolean',
+        title: 'Automatically switch light/dark theme based on sun position',
+        description:
+          'Webapp follows vessels.self.environment.sun (preferred - dawn/sunrise/day/sunset/dusk/night) or vessels.self.environment.mode (simpler day/night fallback) instead of the manual light/dark toggle. Needs a plugin like signalk-derived-data publishing one of those paths.',
+        default: false,
+      },
     },
   }
 
@@ -578,12 +641,14 @@ module.exports = function (app) {
         secondsRemaining: secondsRemaining(),
         deadlineAt,
         notificationPath,
+        themeRecommendation: computeThemeRecommendation(),
         config: {
           checkIntervalMinutes: config('checkIntervalMinutes', 15),
           ackWindowSeconds: config('ackWindowSeconds', 90),
           warnWindowSeconds: config('warnWindowSeconds', 60),
           alarmWindowSeconds: config('alarmWindowSeconds', 60),
           playSounds: config('playSounds', true),
+          autoTheme: config('autoTheme', false),
         },
       }
       debugLog('OUTPUT REST GET /status ->', { state: body.state, secondsRemaining: body.secondsRemaining })

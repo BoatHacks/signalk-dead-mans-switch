@@ -120,6 +120,10 @@
           "playSounds": {
             "type": "boolean",
             "description": "Whether the companion webapp should play audio (the emergency siren and the repeating alarm sound). Set via the plugin's 'Play sounds in browser' config option."
+          },
+          "autoTheme": {
+            "type": "boolean",
+            "description": "Whether the webapp should follow themeRecommendation automatically instead of a manual light/dark toggle. Set via the plugin's 'Automatically switch light/dark theme based on sun position' config option."
           }
         }
       },
@@ -140,6 +144,12 @@
           "notificationPath": {
             "type": "string",
             "description": "Full SignalK path (including the leading 'notifications.') the plugin publishes escalation notifications to."
+          },
+          "themeRecommendation": {
+            "type": "string",
+            "nullable": true,
+            "enum": ["light", "dark", null],
+            "description": "Recommended webapp theme, derived from vessels.self.environment.sun (preferred) or vessels.self.environment.mode. Null if the 'Automatically switch theme' config option is off, or neither environment path has a usable value yet."
           },
           "config": { "$ref": "#/components/schemas/StageConfig" }
         },

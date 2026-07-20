@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- New **Automatically switch light/dark theme based on sun position**
+  config option (off by default). When on, the webapp follows
+  `vessels.self.environment.sun` (preferred - dawn/sunrise/day/sunset/
+  dusk/night, only `day` counts as light) or `vessels.self.environment.mode`
+  (simpler day/night fallback) instead of a manual toggle - the toggle
+  button is hidden entirely while this is on. Computed server-side and
+  exposed via `GET /status`'s new `themeRecommendation` field (`"light"`,
+  `"dark"`, or `null` if the option is off or neither path has a usable
+  value yet).
 - Merged "Styling for embedding in an iframe" from hoeken: `?embedded=true`
   hosts the webapp transparently in an iframe - toolbar and progress bar
   hidden, state button fills the viewport, connection banner overlays

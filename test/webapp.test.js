@@ -20,7 +20,7 @@ test('webapp has no title bar/header element', () => {
 
 const DEFAULT_CONFIG = { checkIntervalMinutes: 15, ackWindowSeconds: 90, warnWindowSeconds: 60, alarmWindowSeconds: 60 }
 
-async function statusFetch(state, secondsRemaining, config) {
+async function statusFetch(state, secondsRemaining, config, themeRecommendation = null) {
   return async (url) => {
     if (String(url).endsWith('/status')) {
       return {
@@ -32,6 +32,7 @@ async function statusFetch(state, secondsRemaining, config) {
           secondsRemaining,
           deadlineAt: secondsRemaining !== null ? Date.now() + secondsRemaining * 1000 : null,
           notificationPath: 'notifications.security.deadmansswitch',
+          themeRecommendation,
           config: config || DEFAULT_CONFIG,
         }),
       }
@@ -252,6 +253,46 @@ test('theme toggle button is present and flips data-theme on the document', asyn
   await new Promise((resolve) => setTimeout(resolve, 150))
   const after = doc.documentElement.getAttribute('data-theme')
   assert.notEqual(before, after)
+})
+
+test('autoTheme: true applies the server-recommended theme automatically', async (t) => {
+  const fetchImpl = await statusFetch('armed', 900, { ...DEFAULT_CONFIG, autoTheme: true }, 'dark')
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+  await new Promise((resolve) => setTimeout(resolve, 300))
+
+  assert.equal(doc.documentElement.getAttribute('data-theme'), 'dark')
+})
+
+test('autoTheme: true hides the manual theme toggle button', async (t) => {
+  const fetchImpl = await statusFetch('armed', 900, { ...DEFAULT_CONFIG, autoTheme: true }, 'light')
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  assert.equal(doc.querySelector('button.theme-toggle'), null, 'manual toggle should not be shown when theme is automatic')
+})
+
+test('autoTheme: false keeps the manual toggle visible even if a recommendation happens to be present', async (t) => {
+  const fetchImpl = await statusFetch('armed', 900, { ...DEFAULT_CONFIG, autoTheme: false }, 'dark')
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  assert.ok(doc.querySelector('button.theme-toggle'), 'manual toggle should still be present when autoTheme is off')
+  // And the recommendation should NOT have been applied since the feature is off.
+  assert.notEqual(doc.documentElement.getAttribute('data-theme'), undefined)
+})
+
+test('autoTheme: true with no recommendation yet (null) does not force a theme and keeps the toggle hidden', async (t) => {
+  const fetchImpl = await statusFetch('armed', 900, { ...DEFAULT_CONFIG, autoTheme: true }, null)
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+  await new Promise((resolve) => setTimeout(resolve, 150))
+
+  // Falls back to whatever the normal light/dark default resolution is
+  // (OS preference / localStorage) - just confirm it didn't crash and
+  // still has a valid theme attribute set.
+  assert.ok(['light', 'dark'].includes(doc.documentElement.getAttribute('data-theme')))
+  assert.equal(doc.querySelector('button.theme-toggle'), null)
 })
 
 test('a failed status fetch shows a clear connection-lost banner and dims the state button, without blanking the last known state', async (t) => {

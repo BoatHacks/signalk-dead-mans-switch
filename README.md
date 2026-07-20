@@ -189,6 +189,29 @@ Set via the plugin's config page in the Signal K admin UI:
 | Alarm window                | `60` seconds                 | Time to ack before `alarm` escalates to `emergency`                |
 | Notification sub-path      | `security.deadmansswitch`   | Appended after `notifications.`                                    |
 | Play sounds in browser      | `true`                       | Whether the companion webapp plays the emergency siren and repeating alarm sound |
+| Automatically switch light/dark theme based on sun position | `false` | See "Automatic theme" below |
+
+### Automatic theme
+
+When enabled, the webapp follows `vessels.self.environment.sun`
+(preferred) or `vessels.self.environment.mode` (fallback) instead of a
+manual toggle - the toggle button is hidden entirely while this is on.
+
+- `environment.sun` (set by
+  [signalk-derived-data](https://github.com/SignalK/signalk-derived-data)
+  to one of `dawn`/`sunrise`/`day`/`sunset`/`dusk`/`night`) is checked
+  first: `day` means light, anything else means dark. The point is
+  protecting night vision, which matters from dusk through dawn, not
+  just once it's fully dark.
+- `environment.mode` (a simpler `day`/`night` string some setups use
+  instead) is the fallback if `environment.sun` isn't available.
+- If neither path has a usable value, the webapp falls back to its
+  normal default (OS preference / last manually-picked theme) and the
+  toggle stays hidden until a recommendation becomes available.
+
+Needs a plugin like `signalk-derived-data` actually publishing one of
+those paths - this plugin only reads them, it doesn't calculate sun
+position itself.
 
 ### Debug logging
 

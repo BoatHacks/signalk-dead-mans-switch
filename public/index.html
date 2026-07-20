@@ -442,6 +442,21 @@ function App() {
     }
   }, [theme])
 
+  // When the plugin's "Automatically switch theme" option is on, follow
+  // its recommendation (derived server-side from environment.sun/mode)
+  // instead of waiting for a manual toggle. Only acts when the
+  // recommendation actually differs from the current theme, so this
+  // doesn't fight a fresh manual click mid-poll-cycle for no reason - and
+  // does nothing at all if the option is off or the server has no
+  // recommendation yet (e.g. neither environment path is populated).
+  useEffect(() => {
+    if (!status || !status.config || !status.config.autoTheme) return
+    const recommendation = status.themeRecommendation
+    if ((recommendation === 'light' || recommendation === 'dark') && recommendation !== theme) {
+      setTheme(recommendation)
+    }
+  }, [status && status.config && status.config.autoTheme, status && status.themeRecommendation])
+
   // fetch() only rejects on a network-level failure, NOT on an HTTP error
   // status - without this check a 404 from a wrong path would silently
   // leave the page showing stale/blank state forever.
@@ -538,7 +553,7 @@ function App() {
     <div class="toolbar">
       ${stage !== 'disarmed' &&
       html`<button type="button" class="icon-btn disarm-btn" onClick=${handleDisarm}>Disarm</button>`}
-      <${ThemeToggle} theme=${theme} setTheme=${setTheme} />
+      ${!(status.config && status.config.autoTheme) && html`<${ThemeToggle} theme=${theme} setTheme=${setTheme} />`}
     </div>
     <main>
       ${connectionError &&
