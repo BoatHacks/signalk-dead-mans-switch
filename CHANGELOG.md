@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Merged "Styling for embedding in an iframe" from hoeken: `?embedded=true`
+  hosts the webapp transparently in an iframe - toolbar and progress bar
+  hidden, state button fills the viewport, connection banner overlays
+  instead of pushing content down. Added test coverage for it (none
+  shipped with the PR).
+- New **Play sounds in browser** config option (on by default). Unchecking
+  it disables the webapp's emergency siren and repeating alarm sound
+  entirely - useful when this notification is already wired into a
+  dedicated alarm system and the browser's own audio would just be
+  redundant. Exposed via `GET /status`'s `config.playSounds` (defaults to
+  `true` if a server doesn't have the option yet).
+
 ### Changed
 - Countdown time is now formatted as bare `mm:ss` (e.g. `12:34`, no
   "remaining" suffix) instead of `12m 34s remaining`, and displayed at

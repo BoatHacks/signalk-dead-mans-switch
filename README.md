@@ -90,6 +90,11 @@ stage changes away from `alarm` in either direction (escalating to
 emergency, which has its own continuous siren instead, or being
 acknowledged).
 
+Both sounds are controlled by the plugin's **Play sounds in browser**
+config option (on by default). Turn it off if this notification is
+already wired into a dedicated alarm system and the browser's own
+audio would just be redundant.
+
 ## REST API
 
 All endpoints are mounted at `/plugins/signalk-dead-mans-switch`.
@@ -183,6 +188,7 @@ Set via the plugin's config page in the Signal K admin UI:
 | Warn window                | `60` seconds                 | Time to ack before `warn` escalates to `alarm`                     |
 | Alarm window                | `60` seconds                 | Time to ack before `alarm` escalates to `emergency`                |
 | Notification sub-path      | `security.deadmansswitch`   | Appended after `notifications.`                                    |
+| Play sounds in browser      | `true`                       | Whether the companion webapp plays the emergency siren and repeating alarm sound |
 
 ### Debug logging
 

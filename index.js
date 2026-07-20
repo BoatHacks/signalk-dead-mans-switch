@@ -543,6 +543,13 @@ module.exports = function (app) {
         description: 'Appended after "notifications." - e.g. "security.deadmansswitch"',
         default: 'security.deadmansswitch',
       },
+      playSounds: {
+        type: 'boolean',
+        title: 'Play sounds in browser',
+        description:
+          'The companion webapp plays a siren at emergency and a repeating alert sound at alarm. Uncheck to disable audio in the webapp entirely - useful if this notification is already wired into a dedicated alarm system and the browser sounds would just be redundant/annoying.',
+        default: true,
+      },
     },
   }
 
@@ -576,6 +583,7 @@ module.exports = function (app) {
           ackWindowSeconds: config('ackWindowSeconds', 90),
           warnWindowSeconds: config('warnWindowSeconds', 60),
           alarmWindowSeconds: config('alarmWindowSeconds', 60),
+          playSounds: config('playSounds', true),
         },
       }
       debugLog('OUTPUT REST GET /status ->', { state: body.state, secondsRemaining: body.secondsRemaining })

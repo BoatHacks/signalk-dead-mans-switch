@@ -331,6 +331,25 @@ test('does not play the siren for non-emergency stages', async (t) => {
   assert.equal(dom.window.__audioCalls.play, 0, 'siren should not play before reaching emergency')
 })
 
+test('playSounds: false disables the emergency siren', async (t) => {
+  const fetchImpl = await statusFetch('emergency', null, { ...DEFAULT_CONFIG, playSounds: false })
+  const { dom, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+  await new Promise((resolve) => setTimeout(resolve, 100))
+
+  assert.equal(dom.window.__audioCalls.play, 0, 'siren must not play when playSounds is false, even at emergency')
+})
+
+test('playSounds missing/undefined defaults to enabled (older server without the option)', async (t) => {
+  const configWithoutPlaySounds = { checkIntervalMinutes: 15, ackWindowSeconds: 90, warnWindowSeconds: 60, alarmWindowSeconds: 60 }
+  const fetchImpl = await statusFetch('emergency', null, configWithoutPlaySounds)
+  const { dom, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+  await new Promise((resolve) => setTimeout(resolve, 100))
+
+  assert.ok(dom.window.__audioCalls.play > 0, 'siren should still play by default when playSounds is simply absent from config')
+})
+
 test('stops the siren once emergency is acknowledged', async (t) => {
   let state = 'emergency'
   const fetchImpl = async (url, opts) => {
@@ -394,6 +413,15 @@ test('does not play the alarm sound for non-alarm stages', async (t) => {
   await new Promise((resolve) => setTimeout(resolve, 100))
 
   assert.equal(dom.window.__audioCalls.play, 0, 'alarm sound should not play outside the alarm stage')
+})
+
+test('playSounds: false disables the repeating alarm sound too', async (t) => {
+  const fetchImpl = await statusFetch('alarm', 55, { ...DEFAULT_CONFIG, playSounds: false })
+  const { dom, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+  await new Promise((resolve) => setTimeout(resolve, 100))
+
+  assert.equal(dom.window.__audioCalls.play, 0, 'alarm sound must not play when playSounds is false')
 })
 
 test('stops repeating the alarm sound once acknowledged out of alarm', async (t) => {

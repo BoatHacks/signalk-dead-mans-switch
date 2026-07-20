@@ -116,6 +116,10 @@
           "alarmWindowSeconds": {
             "type": "number",
             "description": "Seconds to acknowledge before escalating from 'alarm' to 'emergency'."
+          },
+          "playSounds": {
+            "type": "boolean",
+            "description": "Whether the companion webapp should play audio (the emergency siren and the repeating alarm sound). Set via the plugin's 'Play sounds in browser' config option."
           }
         }
       },

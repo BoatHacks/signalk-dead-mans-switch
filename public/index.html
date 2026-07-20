@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="version" content="0.4.2" />
+<meta name="version" content="0.5.0" />
 <link rel="icon" type="image/png" href="assets/icons/icon-512.png">
 <title>Dead Man's Switch</title>
 <style>
@@ -378,10 +378,14 @@ function App() {
   // Play the siren, looping at full volume, for exactly as long as the
   // switch is in "emergency" - start the instant it's reached, stop the
   // instant it's acknowledged (ack always drops back out of emergency).
+  // Gated by the plugin's "Play sounds in browser" config option -
+  // missing/undefined (e.g. an older server) defaults to enabled, only an
+  // explicit `false` turns audio off.
   useEffect(() => {
     const el = audioRef.current
     if (!el) return
-    if (status && status.state === 'emergency') {
+    const soundsEnabled = !status || !status.config || status.config.playSounds !== false
+    if (status && status.state === 'emergency' && soundsEnabled) {
       el.volume = 1
       el.loop = true
       el.play().catch(() => {
@@ -394,20 +398,21 @@ function App() {
       el.pause()
       el.currentTime = 0
     }
-  }, [status && status.state])
+  }, [status && status.state, status && status.config && status.config.playSounds])
 
   // Replay the alarm sound every 10s for exactly as long as the switch is
   // in "alarm" - once immediately on entering the stage, then on a
   // repeating timer, stopping (and clearing the timer) the moment the
   // stage changes away from "alarm" in either direction (escalating to
   // emergency, which has its own continuous siren instead, or being
-  // acknowledged).
+  // acknowledged). Same playSounds gating as the siren above.
   useEffect(() => {
     if (alarmIntervalRef.current) {
       clearInterval(alarmIntervalRef.current)
       alarmIntervalRef.current = null
     }
-    if (status && status.state === 'alarm') {
+    const soundsEnabled = !status || !status.config || status.config.playSounds !== false
+    if (status && status.state === 'alarm' && soundsEnabled) {
       const playOnce = () => {
         const el = alarmAudioRef.current
         if (!el) return
@@ -426,7 +431,7 @@ function App() {
         alarmIntervalRef.current = null
       }
     }
-  }, [status && status.state])
+  }, [status && status.state, status && status.config && status.config.playSounds])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)

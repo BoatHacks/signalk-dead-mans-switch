@@ -22,6 +22,18 @@ test('GET /status reflects armed state with a countdown', (t) => {
   assert.equal(res.body.secondsRemaining, 60)
 })
 
+test('GET /status config.playSounds defaults to true when unset', (t) => {
+  const { router } = setup(t)
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.body.config.playSounds, true)
+})
+
+test('GET /status config.playSounds reflects the configured value', (t) => {
+  const { router } = setup(t, { playSounds: false })
+  const res = router.call('get', '/status', undefined)
+  assert.equal(res.body.config.playSounds, false)
+})
+
 test('GET /status reflects escalated stage and shrinking countdown', (t) => {
   const { router } = setup(t)
   t.mock.timers.tick(60_000) // -> alert, 30s window
