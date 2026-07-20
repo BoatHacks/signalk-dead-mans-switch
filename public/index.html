@@ -37,6 +37,11 @@
     --stage-emergency: #ce2029;
     --stage-emergency-blink: #8c1116;
     --stage-emergency-outline: #ffd500;
+    /* Precomputed 20% mix of --stage-alarm over --surface. Written out
+       by hand rather than color-mix() because older Chromium (e.g. 69,
+       still common on marine plotters/tablets) doesn't support
+       color-mix() at all - keep in sync if either source color changes. */
+    --alarm-surface: #f5d2d4;
     /* alert/warn are pale/bright yellow - white text (the default for
        every other stage) would be unreadable on them, so those two
        stages use dark text instead. */
@@ -66,6 +71,9 @@
        reintroduce a non-red hue into the red-shifted night palette and
        defeat the point of it. Stays within the red family instead. */
     --stage-emergency-outline: #ff5c47;
+    /* Precomputed 20% mix of dark --stage-alarm over dark --surface -
+       see the light-theme note on this variable. */
+    --alarm-surface: #472e30;
     --state-text-pale: var(--on-accent-text);
   }
 
@@ -73,11 +81,22 @@
   html, body {
     margin: 0;
     height: 100%;
-    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    /* system-ui must come FIRST: on older Linux Chromium (e.g. 69 on
+       marine plotters), an unknown leading family like -apple-system is
+       handed to fontconfig, which never fails a lookup - it substitutes
+       its "best match", usually the default SERIF - so the sans-serif at
+       the end of the stack was never reached. system-ui resolves
+       natively (Chrome 56+) and short-circuits that. */
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: var(--bg);
     color: var(--text);
     transition: background-color 0.15s ease, color 0.15s ease;
   }
+  /* Form controls don't inherit the page font by default, and nearly all
+     text in this app lives inside <button>s. */
+  button { font-family: inherit; }
+  /* Child margins instead of flex gap throughout - gap in flexbox needs
+     Chrome 84+, older Chromium just renders everything flush. */
   main {
     padding: 60px 20px 40px;
     max-width: 480px;
@@ -85,16 +104,16 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 16px;
   }
+  main > * + * { margin-top: 16px; }
 
   .toolbar {
     position: fixed;
     top: 14px;
     right: 14px;
     display: flex;
-    gap: 8px;
   }
+  .toolbar > * + * { margin-left: 8px; }
   .icon-btn {
     background: var(--surface);
     border: 1px solid var(--border-strong);
@@ -129,9 +148,9 @@
     text-align: center;
     display: flex;
     flex-direction: column;
-    gap: 6px;
     transition: background 0.2s ease, transform 0.05s ease;
   }
+  button.state-button > * + * { margin-top: 6px; }
   button.state-button:active { transform: scale(0.98); }
   button.state-button.blink {
     border-width: 6px;
@@ -150,8 +169,13 @@
   }
   .state-title { font-size: 19px; font-weight: 700; line-height: 1.3; }
   .state-countdown { font-size: 19px; font-weight: 700; line-height: 1.3; opacity: 0.9; }
-  .state-cta { font-size: 13px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; opacity: 0.85; margin-top: 2px; }
-  .state-cta.emergency-cta { font-size: 32px; font-weight: 800; letter-spacing: 0.04em; opacity: 1; margin-top: 8px; }
+  .state-cta { font-size: 13px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; opacity: 0.85; }
+  .state-cta.emergency-cta { font-size: 32px; font-weight: 800; letter-spacing: 0.04em; opacity: 1; }
+  /* The extra breathing room the ctas used to get from margin+gap,
+     rolled into one margin now that gap is gone. Selector matches the
+     child-margin rule's specificity so these win. */
+  button.state-button > .state-cta { margin-top: 8px; }
+  button.state-button > .state-cta.emergency-cta { margin-top: 14px; }
 
   .progress-track {
     width: 100%;
@@ -169,7 +193,7 @@
 
   .connection-banner {
     width: 100%;
-    background: color-mix(in srgb, var(--stage-alarm) 20%, var(--surface));
+    background: var(--alarm-surface);
     border: 2px solid var(--stage-alarm);
     color: var(--text);
     border-radius: 10px;
@@ -177,8 +201,8 @@
     font-size: 13px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
   }
+  .connection-banner > * + * { margin-top: 2px; }
   .connection-banner strong { color: var(--stage-alarm); font-size: 14px; }
 
   /* Dimmed rather than hidden - the whole point is to keep showing the
@@ -215,9 +239,12 @@
     height: 100%;
     max-width: none;
     padding: 0;
-    gap: 0;
     position: relative;
   }
+  /* No spacing between children in embedded mode - and the margin must
+     not leak onto the absolutely-positioned banner/progress overlays
+     (a margin-top would shove the top-anchored banner down). */
+  [data-embedded] main > * + * { margin-top: 0; }
   [data-embedded] button.state-button {
     flex: 1;
     height: 100%;

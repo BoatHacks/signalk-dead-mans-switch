@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Compatibility with older Chromium (e.g. 69, still common on marine
+  plotters and older tablets):
+  - The page rendered in a **serif** font. The font stack led with
+    `-apple-system`, which older Linux Chromium hands to fontconfig;
+    fontconfig never fails a lookup and substitutes its "best match" -
+    usually the default serif - so the `sans-serif` at the end of the
+    stack was never reached. The stack now leads with `system-ui`
+    (resolved natively since Chrome 56), and buttons - where nearly all
+    of this app's text lives - now explicitly inherit the page font,
+    since form controls don't do so by default.
+  - Flexbox `gap` (Chrome 84+) replaced with child margins, so the
+    toolbar and the state button's contents no longer render flush
+    together.
+  - `color-mix()` (Chrome 111+) in the connection-lost banner replaced
+    with precomputed per-theme colors, so the banner background is no
+    longer transparent.
+
 ## [0.5.1] - 2026-07-20
 
 ### Fixed
