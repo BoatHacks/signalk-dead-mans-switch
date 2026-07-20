@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Countdown time is now formatted as `mm:ss` (e.g. `12:34 remaining`)
+  instead of `12m 34s remaining`, and displayed at the same size/weight
+  as the stage title (ARMED/WARNING/etc.) instead of smaller text.
+
 ## [0.4.0] - 2026-07-18
 
 ### Fixed

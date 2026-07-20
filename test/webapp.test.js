@@ -48,7 +48,28 @@ test('the merged state button shows both the stage and remaining time while arme
   const stateBtn = doc.querySelector('button.state-button')
   assert.ok(stateBtn, 'state-button should be present')
   assert.match(stateBtn.textContent, /ARMED/)
-  assert.match(stateBtn.textContent, /12m 34s remaining/)
+  assert.match(stateBtn.textContent, /12:34 remaining/)
+})
+
+test('countdown time is formatted as mm:ss with zero-padded seconds', async (t) => {
+  const fetchImpl = await statusFetch('armed', 305, DEFAULT_CONFIG) // 5m 05s
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  const stateBtn = doc.querySelector('button.state-button')
+  assert.match(stateBtn.textContent, /5:05 remaining/, 'seconds under 10 should be zero-padded (5:05, not 5:5)')
+})
+
+test('countdown text is styled the same size/weight as the state title', () => {
+  const html = fs.readFileSync(INDEX_HTML, 'utf8')
+  const titleRule = html.match(/\.state-title\s*\{([^}]*)\}/)[1]
+  const countdownRule = html.match(/\.state-countdown\s*\{([^}]*)\}/)[1]
+  const titleSize = titleRule.match(/font-size:\s*([\d.]+px)/)[1]
+  const countdownSize = countdownRule.match(/font-size:\s*([\d.]+px)/)[1]
+  const titleWeight = titleRule.match(/font-weight:\s*(\d+)/)[1]
+  const countdownWeight = countdownRule.match(/font-weight:\s*(\d+)/)[1]
+  assert.equal(countdownSize, titleSize)
+  assert.equal(countdownWeight, titleWeight)
 })
 
 test('the merged state button shows remaining time while escalated too', async (t) => {
@@ -58,7 +79,7 @@ test('the merged state button shows remaining time while escalated too', async (
 
   const stateBtn = doc.querySelector('button.state-button')
   assert.match(stateBtn.textContent, /ALERT/)
-  assert.match(stateBtn.textContent, /42s remaining/)
+  assert.match(stateBtn.textContent, /0:42 remaining/)
 })
 
 test('progress bar fills (grows) as time elapses, rather than draining', async (t) => {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="version" content="0.4.0" />
+<meta name="version" content="0.4.1" />
 <link rel="icon" type="image/png" href="assets/icons/icon-512.png">
 <title>Dead Man's Switch</title>
 <style>
@@ -149,7 +149,7 @@
     }
   }
   .state-title { font-size: 19px; font-weight: 700; line-height: 1.3; }
-  .state-countdown { font-size: 14px; font-weight: 500; opacity: 0.9; }
+  .state-countdown { font-size: 19px; font-weight: 700; line-height: 1.3; opacity: 0.9; }
   .state-cta { font-size: 13px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; opacity: 0.85; margin-top: 2px; }
   .state-cta.emergency-cta { font-size: 32px; font-weight: 800; letter-spacing: 0.04em; opacity: 1; margin-top: 8px; }
 
@@ -248,7 +248,7 @@ function formatSeconds(s) {
   if (s === null || s === undefined) return null
   const m = Math.floor(s / 60)
   const sec = s % 60
-  return m > 0 ? `${m}m ${sec}s` : `${sec}s`
+  return `${m}:${String(sec).padStart(2, '0')}`
 }
 
 function SunIcon() {
