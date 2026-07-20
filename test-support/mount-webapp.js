@@ -11,6 +11,19 @@ function extractModuleScript(html) {
   return match[1]
 }
 
+// Plain (non-module) inline <script> tags - e.g. the embedded-mode
+// detection script in <head> that runs before first paint. Module scripts
+// are excluded (handled separately by extractModuleScript/import()).
+function extractPlainScripts(html) {
+  const scripts = []
+  const re = /<script(?![^>]*type="module")[^>]*>([\s\S]*?)<\/script>/g
+  let m
+  while ((m = re.exec(html))) {
+    scripts.push(m[1])
+  }
+  return scripts
+}
+
 // Mounts the webapp's real script in a jsdom document, with fetch() routed
 // through the caller-supplied fetchImpl. jsdom can't resolve a relative
 // `import` inside an inline <script type="module"> against a fake
@@ -67,6 +80,15 @@ async function mountWebapp(fetchImpl, { url = 'http://localhost/plugins/signalk-
   }
   globalThis.fetch = fetchImpl
 
+  // Plain <head> scripts (e.g. the embedded-mode attribute setter) run
+  // before the module script, matching real document load order. Run via
+  // `new Function` bound explicitly to window/document rather than
+  // dom.window.eval(), which doesn't expose them as in-scope globals
+  // without jsdom's `runScripts` option enabled.
+  for (const plainScript of extractPlainScripts(html)) {
+    new Function('window', 'document', plainScript)(dom.window, dom.window.document)
+  }
+
   try {
     await import(`file://${tmpScriptPath}?t=${Date.now()}`)
     // Preact/htm's render + the app's first effect (initial fetch) both
@@ -91,4 +113,4 @@ async function mountWebapp(fetchImpl, { url = 'http://localhost/plugins/signalk-
   return { dom, doc, unmount }
 }
 
-module.exports = { mountWebapp, PUBLIC_DIR, INDEX_HTML, extractModuleScript }
+module.exports = { mountWebapp, PUBLIC_DIR, INDEX_HTML, extractModuleScript, extractPlainScripts }

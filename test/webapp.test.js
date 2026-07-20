@@ -498,3 +498,29 @@ test('BASE is a fixed absolute /plugins/<id> path, not derived from window.locat
   const html = fs.readFileSync(INDEX_HTML, 'utf8')
   assert.match(html, /const BASE = '\/plugins\/signalk-dead-mans-switch'/)
 })
+
+test('?embedded=true sets data-embedded on the document before first paint', async (t) => {
+  const fetchImpl = await statusFetch('armed', 900, DEFAULT_CONFIG)
+  const { doc, unmount } = await mountWebapp(fetchImpl, {
+    url: 'http://localhost/plugins/signalk-dead-mans-switch/?embedded=true',
+  })
+  t.after(unmount)
+
+  assert.equal(doc.documentElement.getAttribute('data-embedded'), '')
+})
+
+test('without ?embedded=true, data-embedded is not set', async (t) => {
+  const fetchImpl = await statusFetch('armed', 900, DEFAULT_CONFIG)
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  assert.equal(doc.documentElement.hasAttribute('data-embedded'), false)
+})
+
+test('embedded mode CSS hides the toolbar, transparent background, and fills the viewport', () => {
+  const html = fs.readFileSync(INDEX_HTML, 'utf8')
+  assert.match(html, /\[data-embedded\][^{]*\{[^}]*background:\s*transparent/)
+  assert.match(html, /\[data-embedded\]\s*\.toolbar\s*\{\s*display:\s*none/)
+  assert.match(html, /\[data-embedded\]\s*#app\s*\{\s*height:\s*100%/)
+  assert.match(html, /\[data-embedded\]\s*\.progress-track\s*\{\s*display:\s*none/)
+})
