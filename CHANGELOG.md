@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-20
+
 ### Fixed
 - Embedded mode's overlaid progress bar ran off the right edge of the
   button. Its base rule sets `width: 100%`, which is over-constrained
