@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-20
+
 ### Changed
 - In embedded mode (`?embedded=true`), the progress bar is now overlaid
   near the bottom of the button itself instead of being hidden - neutral

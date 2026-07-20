@@ -3,7 +3,7 @@
   "info": {
     "title": "Dead Man's Switch",
     "description": "Watch dead man's switch: periodic 'you still there?' check-ins that escalate through alert -> warn -> alarm -> emergency notification states until acknowledged. This API is used by the plugin's companion webapp, and can equally be driven by an external ack source such as a physical hardware button.",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "license": {
       "name": "MIT",
       "url": "https://opensource.org/licenses/MIT"
