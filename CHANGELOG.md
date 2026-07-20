@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Embedded mode's overlaid progress bar ran off the right edge of the
+  button. Its base rule sets `width: 100%`, which is over-constrained
+  together with absolute positioning plus explicit `left` and `right`
+  offsets - added `width: auto` to the embedded override so `left`/
+  `right` alone determine the width, as intended.
+
 ## [0.5.0] - 2026-07-20
 
 ### Changed

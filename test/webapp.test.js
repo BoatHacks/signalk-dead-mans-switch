@@ -599,3 +599,18 @@ test('embedded mode overlays the progress bar inside the button rather than hidi
   // Not hidden anymore.
   assert.doesNotMatch(html, /\[data-embedded\]\s*\.progress-track\s*\{\s*display:\s*none/)
 })
+
+test('embedded progress bar overlay does not run off the right edge (width:auto overrides the base width:100%)', () => {
+  // Regression: .progress-track's base rule sets width: 100%, which is
+  // over-constrained together with absolute positioning plus explicit
+  // left AND right offsets - the browser honors `left` and the 100%
+  // width, extending the element index further right than the button
+  // itself rather than filling the space between left and right. Setting
+  // width: auto in the embedded override lets left/right alone determine
+  // the width, as intended.
+  const html = fs.readFileSync(INDEX_HTML, 'utf8')
+  const rule = html.match(/\[data-embedded\]\s*\.progress-track\s*\{([^}]*)\}/)[1]
+  assert.match(rule, /width:\s*auto/)
+  assert.match(rule, /left:\s*24px/)
+  assert.match(rule, /right:\s*24px/)
+})
