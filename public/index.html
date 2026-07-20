@@ -190,7 +190,51 @@
     filter: saturate(0.6);
   }
   .loading-note { color: var(--text-muted); font-size: 13px; }
+
+  /* ---------- embedded mode (?embedded=true) ----------
+     For hosting inside an iframe on a dashboard: transparent page
+     background, no toolbar (arm/disarm + theme controls), and the state
+     button grows to fill the whole viewport. The progress bar is dropped
+     (the button IS the page); the connection-lost banner overlays the top
+     of the button instead of pushing it down, so the stale warning is
+     still visible without breaking the full-page layout. */
+  [data-embedded],
+  [data-embedded] body {
+    background: transparent;
+    /* The emergency blink scales the button slightly past 100% - at
+       full-viewport size that would flash scrollbars in the iframe. */
+    overflow: hidden;
+  }
+  [data-embedded] .toolbar { display: none; }
+  [data-embedded] main {
+    height: 100%;
+    max-width: none;
+    padding: 0;
+    gap: 0;
+    position: relative;
+  }
+  [data-embedded] button.state-button {
+    flex: 1;
+    height: 100%;
+    justify-content: center;
+  }
+  [data-embedded] .progress-track { display: none; }
+  [data-embedded] .connection-banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1;
+    border-radius: 0 0 10px 10px;
+  }
 </style>
+<script>
+  // Set before first paint so an iframe host never sees a flash of the
+  // opaque page background.
+  if (new URLSearchParams(window.location.search).get('embedded') === 'true') {
+    document.documentElement.setAttribute('data-embedded', '')
+  }
+</script>
 </head>
 <body>
 <div id="app"></div>
