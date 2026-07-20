@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="version" content="0.4.1" />
+<meta name="version" content="0.4.2" />
 <link rel="icon" type="image/png" href="assets/icons/icon-512.png">
 <title>Dead Man's Switch</title>
 <style>
@@ -505,7 +505,7 @@ function App() {
       >
         <span class="state-title">${STAGE_TITLE[stage] || stage}</span>
         ${remaining !== null &&
-        html`<span class="state-countdown">${formatSeconds(remaining)} remaining</span>`}
+        html`<span class="state-countdown">${formatSeconds(remaining)}</span>`}
         ${stage === 'emergency' &&
         html`<span class="state-countdown">No further auto-escalation</span>`}
         <span class=${`state-cta ${stage === 'emergency' ? 'emergency-cta' : ''}`}>${ACK_LABEL[stage] || 'Tap to acknowledge'}</span>

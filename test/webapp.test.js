@@ -48,7 +48,7 @@ test('the merged state button shows both the stage and remaining time while arme
   const stateBtn = doc.querySelector('button.state-button')
   assert.ok(stateBtn, 'state-button should be present')
   assert.match(stateBtn.textContent, /ARMED/)
-  assert.match(stateBtn.textContent, /12:34 remaining/)
+  assert.match(stateBtn.textContent, /12:34/)
 })
 
 test('countdown time is formatted as mm:ss with zero-padded seconds', async (t) => {
@@ -57,7 +57,7 @@ test('countdown time is formatted as mm:ss with zero-padded seconds', async (t) 
   t.after(unmount)
 
   const stateBtn = doc.querySelector('button.state-button')
-  assert.match(stateBtn.textContent, /5:05 remaining/, 'seconds under 10 should be zero-padded (5:05, not 5:5)')
+  assert.match(stateBtn.textContent, /5:05/, 'seconds under 10 should be zero-padded (5:05, not 5:5)')
 })
 
 test('countdown text is styled the same size/weight as the state title', () => {
@@ -79,7 +79,7 @@ test('the merged state button shows remaining time while escalated too', async (
 
   const stateBtn = doc.querySelector('button.state-button')
   assert.match(stateBtn.textContent, /ALERT/)
-  assert.match(stateBtn.textContent, /0:42 remaining/)
+  assert.match(stateBtn.textContent, /0:42/)
 })
 
 test('progress bar fills (grows) as time elapses, rather than draining', async (t) => {
