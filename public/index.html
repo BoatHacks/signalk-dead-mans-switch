@@ -206,6 +206,9 @@
     overflow: hidden;
   }
   [data-embedded] .toolbar { display: none; }
+  /* The height:100% chain has to pass through the render root, which
+     otherwise has auto height and collapses main to its content. */
+  [data-embedded] #app { height: 100%; }
   [data-embedded] main {
     height: 100%;
     max-width: none;
