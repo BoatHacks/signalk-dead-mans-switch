@@ -9,6 +9,10 @@ Useful for solo or short-handed watchkeeping: if the person on watch stops
 responding, the alarm state keeps climbing instead of silently staying at
 a single low-priority notification.
 
+The companion webapp targets older Chromium (69+) as well as current
+browsers, since marine plotters/MFDs and older tablets often can't be
+updated.
+
 ## How it works
 
 1. Once armed, the plugin waits `checkIntervalMinutes` and then raises a
@@ -269,6 +273,19 @@ toggle in this plugin's own config screen.
 as the app's icon in the SignalK admin UI's webapp list
 (`package.json`'s `signalk.appIcon`). It's not shown anywhere inside
 the webapp's own UI.
+
+## Embedding in a dashboard
+
+Add `?embedded=true` to the webapp's URL to host it inside an iframe on
+a dashboard (e.g. Kip, a custom MFD layout): transparent page
+background so the dashboard's own background shows through, the
+toolbar (disarm + theme toggle) hidden, and the state button grows to
+fill the whole iframe. The progress bar is overlaid near the bottom of
+the button itself rather than hidden, since the button IS the page at
+that point - there's no room for it as a separate element. If the
+connection to the server is lost, the warning banner overlays the top
+of the button instead of pushing it down, so it stays visible without
+breaking the full-page layout.
 
 ## Development
 
