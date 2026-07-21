@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- In-process API for other plugins, via SignalK's PropertyValues
+  mechanism (`app.emitPropertyValue`/`app.onPropertyValues`) - announced
+  once on start as `signalk-dead-mans-switch-api`: `ack()`, `arm()`,
+  `disarm()`, and `getStatus()`, callable directly with no HTTP/auth
+  needed. Same behavior as their REST counterparts (`ack()` returns
+  `false` while disarmed; `getStatus()` reads live state, not a
+  snapshot from when it was announced).
+
 ### Changed
 - External-change detection now subscribes via
   `app.subscriptionmanager.subscribe()` with `sourcePolicy: 'all'`

@@ -95,6 +95,30 @@ config option (on by default). Turn it off if this notification is
 already wired into a dedicated alarm system and the browser's own
 audio would just be redundant.
 
+## In-process API for other plugins
+
+Another plugin calling `/ack`/`/arm`/`/disarm` over HTTP would need an
+auth token for no real reason - plugins share the same process and
+`app` object. Instead, this plugin announces a callable API via
+SignalK's PropertyValues mechanism once on start, under the name
+`signalk-dead-mans-switch-api`:
+
+```js
+app.onPropertyValues('signalk-dead-mans-switch-api', (values) => {
+  const api = values.filter((v) => v).pop() // latest non-undefined value
+  if (!api) return // not emitted yet - onPropertyValues can fire before it has
+  api.ack()                 // same as POST /ack
+  api.arm()                 // same as POST /arm
+  api.disarm()               // same as POST /disarm
+  api.getStatus()             // same shape as GET /status, minus `config`
+})
+```
+
+Each method optionally takes a `reason` string used in debug logging
+(`api.ack('some-other-plugin requested it')`). `getStatus()` reads live
+state on every call - it's not a stale snapshot from when the API was
+announced.
+
 ## REST API
 
 All endpoints are mounted at `/plugins/signalk-dead-mans-switch`.

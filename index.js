@@ -42,6 +42,11 @@
 
 const STAGES = ['alert', 'warn', 'alarm', 'emergency']
 
+// PropertyValues name this plugin's callable API is announced under (see
+// buildExternalApi() below) - namespaced with the plugin id to avoid
+// colliding with another plugin's arbitrary property names.
+const PROPERTY_VALUE_API_NAME = 'signalk-dead-mans-switch-api'
+
 const openapi = require('./openApi.json')
 
 const STAGE_MESSAGE = {
@@ -562,6 +567,10 @@ module.exports = function (app) {
       pollTimer = setInterval(pollForExternalChange, POLL_INTERVAL_MS)
       debugLog(`polling ${notificationPath} for external changes every ${POLL_INTERVAL_MS / 1000}s as a fallback`)
     }
+    if (typeof app.emitPropertyValue === 'function') {
+      app.emitPropertyValue(PROPERTY_VALUE_API_NAME, buildExternalApi())
+      debugLog(`announced in-process API via PropertyValues as "${PROPERTY_VALUE_API_NAME}"`)
+    }
     if (config('enabled', true)) {
       arm('start (enabled)')
     } else {
@@ -648,6 +657,50 @@ module.exports = function (app) {
   // getOpenApi() returning the parsed openApi.json - this surfaces the
   // definition in the server's Admin UI under Documentation -> OpenAPI.
   plugin.getOpenApi = () => openapi
+
+  // ---- In-process API for other plugins (PropertyValues) -------------------
+  //
+  // The REST API below is for the webapp and hardware ack buttons - things
+  // outside the SignalK server process. Another PLUGIN calling it would
+  // mean loopback HTTP with an auth token, for no real reason: plugins
+  // share the same process and app object, and SignalK's own
+  // PropertyValues mechanism (app.emitPropertyValue / app.onPropertyValues)
+  // exists specifically so one plugin can expose a callable API to others
+  // in-process, no HTTP/auth involved - the emitted value can be a
+  // function (or, as here, an object of them). Emitted once on start()
+  // under a name namespaced with this plugin's id; per SignalK's own
+  // PropertyValues docs, `onPropertyValues` delivers the full history of
+  // everything ever emitted for a name as an array (starting with
+  // `undefined` if nothing has been emitted yet), which is exactly why
+  // this is emitted once rather than on every state change - the API
+  // object's methods are closures reading live state on every call, they
+  // don't need to be re-emitted just because that state changed.
+  function buildExternalApi() {
+    return {
+      // Acknowledges the switch, exactly like POST /ack - returns false
+      // if the switch is currently disarmed (nothing to acknowledge).
+      ack: (reason) => ack(reason || 'external plugin via PropertyValues'),
+      // (Re-)arms the switch, exactly like POST /arm.
+      arm: (reason) => {
+        arm(reason || 'external plugin via PropertyValues')
+        return true
+      },
+      // Disarms the switch, exactly like POST /disarm.
+      disarm: (reason) => {
+        disarm(reason || 'external plugin via PropertyValues')
+        return true
+      },
+      // Same shape as GET /status, minus the config block (a caller in
+      // the same process can just read the plugin's own config directly
+      // if it needs to).
+      getStatus: () => ({
+        state,
+        secondsRemaining: secondsRemaining(),
+        deadlineAt,
+        notificationPath,
+      }),
+    }
+  }
 
   // ---- REST API for the ack webapp (and any hardware ack button) -----------
 

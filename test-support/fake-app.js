@@ -8,6 +8,7 @@ function makeFakeApp({ echoSource } = {}) {
   const debugCalls = []
   const subCallbacks = {} // path -> [deltaCallback, ...], registered via subscriptionmanager.subscribe()
   const pathValues = {} // path -> current value, for getSelfPath()
+  const propertyValues = {} // name -> [value, ...] - full history, matching the real API
   let lastSubscription = null
 
   // Dispatches a full delta ({updates: [{$source, source, values: [{path, value}]}]})
@@ -40,6 +41,18 @@ function makeFakeApp({ echoSource } = {}) {
     },
     setPluginStatus(msg) {
       statuses.push(msg)
+    },
+    // Records every emission under `name`, matching the real API's
+    // append-to-history semantics (a consumer's onPropertyValues callback
+    // would receive the whole array). Tests read the latest one via
+    // _lastPropertyValue() rather than modeling the consumer side.
+    emitPropertyValue(name, value) {
+      propertyValues[name] = propertyValues[name] || []
+      propertyValues[name].push(value)
+    },
+    _lastPropertyValue(name) {
+      const values = propertyValues[name] || []
+      return values[values.length - 1]
     },
     // Stand-in for SignalK's standard per-plugin debug facility - always
     // records calls (the fake has no namespace-gating concept; tests
