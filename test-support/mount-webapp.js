@@ -113,4 +113,4 @@ async function mountWebapp(fetchImpl, { url = 'http://localhost/plugins/signalk-
   return { dom, doc, unmount }
 }
 
-module.exports = { mountWebapp, PUBLIC_DIR, INDEX_HTML, extractModuleScript, extractPlainScripts }
+module.exports = { mountWebapp, PUBLIC_DIR, INDEX_HTML }

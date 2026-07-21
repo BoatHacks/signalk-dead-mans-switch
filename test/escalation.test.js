@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { makeFakeApp } = require('../test-support/fake-app')
+const { makeFakeApp, makeFakeRouter } = require('../test-support/fake-app')
 const buildPlugin = require('../index.js')
 
 function setup(t, opts = {}) {
@@ -77,7 +77,6 @@ test('ack from "alert" resets to a resting "armed" notification and restarts the
   assert.equal(app.lastValueFor('notifications.security.deadmansswitch').state, 'alert')
 
   const acked = plugin.registerWithRouter
-  const { makeFakeRouter } = require('../test-support/fake-app')
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
   const res = router.call('post', '/ack', {})
@@ -102,7 +101,6 @@ test('ack from "emergency" resets to a resting "armed" notification rather than 
   t.mock.timers.tick(10_000)
   assert.equal(app.lastValueFor('notifications.security.deadmansswitch').state, 'emergency')
 
-  const { makeFakeRouter } = require('../test-support/fake-app')
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
   router.call('post', '/ack', {})
@@ -113,7 +111,6 @@ test('ack from "emergency" resets to a resting "armed" notification rather than 
 
 test('disarm stops escalation entirely until re-armed, publishing a resting "disarmed" notification', (t) => {
   const { app, plugin } = setup(t)
-  const { makeFakeRouter } = require('../test-support/fake-app')
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
 

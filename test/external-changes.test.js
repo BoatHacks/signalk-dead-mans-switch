@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { makeFakeApp } = require('../test-support/fake-app')
+const { makeFakeApp, makeFakeRouter } = require('../test-support/fake-app')
 const buildPlugin = require('../index.js')
 
 function setup(t, opts = {}) {
@@ -55,7 +55,6 @@ test('an external write of a stage value snaps our state machine to that stage',
 
 test('GET /status reflects the externally-forced stage immediately (no polling delay)', (t) => {
   const { app, plugin } = setup(t)
-  const { makeFakeRouter } = require('../test-support/fake-app')
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
 
@@ -100,7 +99,6 @@ test('external write of a non-stage state (e.g. "normal") is treated as an ackno
 
 test('external changes are ignored entirely while disarmed', (t) => {
   const { app, plugin } = setup(t)
-  const { makeFakeRouter } = require('../test-support/fake-app')
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
   router.call('post', '/disarm', {})
@@ -133,7 +131,6 @@ test('self-echo is caught by the reentrancy guard even when the source string do
   // (isPublishingOwnChange) catches our own writes regardless, as a
   // second line of defense independent of the source-string check.
   t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
-  const { makeFakeApp } = require('../test-support/fake-app')
   const app = makeFakeApp({ echoSource: 'totally-different-source-string' })
   const plugin = buildPlugin(app)
   plugin.start({ checkIntervalMinutes: 1, ackWindowSeconds: 30, warnWindowSeconds: 20, alarmWindowSeconds: 10 })
@@ -146,7 +143,6 @@ test('self-echo is caught by the reentrancy guard even when the source string do
   t.mock.timers.tick(60_000) // -> alert
   assert.equal(app.lastValueFor(PATH).state, 'alert')
 
-  const { makeFakeRouter } = require('../test-support/fake-app')
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
   const res = router.call('post', '/ack', {})
@@ -161,7 +157,6 @@ test('self-echo is caught by the reentrancy guard even when the source string do
 
 test('acknowledging from any stage always results in "armed" with a full-length timer, never "disarmed"', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
-  const { makeFakeApp, makeFakeRouter } = require('../test-support/fake-app')
 
   for (const stage of ['alert', 'warn', 'alarm', 'emergency']) {
     const app = makeFakeApp()
@@ -194,7 +189,6 @@ test('acknowledging from any stage always results in "armed" with a full-length 
 
 test('a v2-API acknowledge (method loses "sound", state unchanged) is treated as an acknowledgement', (t) => {
   const { app, plugin } = setup(t)
-  const { makeFakeRouter } = require('../test-support/fake-app')
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
 
@@ -213,7 +207,6 @@ test('a v2-API acknowledge (method loses "sound", state unchanged) is treated as
 
 test('a v2-API acknowledge from "emergency" (only "sound" removed, "visual" stays) is still treated as an acknowledgement', (t) => {
   const { app, plugin } = setup(t)
-  const { makeFakeRouter } = require('../test-support/fake-app')
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
 
@@ -250,7 +243,6 @@ test('real-world captured payload: Freeboard acknowledging a "warn" notification
   // whatever the plugin puts in the value, so that field can flag intent
   // but can't actually force Freeboard's UI to hide a Silence option.
   const { app, plugin } = setup(t)
-  const { makeFakeRouter } = require('../test-support/fake-app')
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
   t.mock.timers.tick(60_000) // -> alert
@@ -278,7 +270,6 @@ test('real-world captured payload: Freeboard acknowledging an "alert" notificati
   // this plugin's own canSilence: false in the raw value - see the note
   // on the "warn" case above.
   const { app, plugin } = setup(t)
-  const { makeFakeRouter } = require('../test-support/fake-app')
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
   t.mock.timers.tick(60_000) // -> alert
@@ -302,7 +293,6 @@ test('status.acknowledged: true is trusted directly as an acknowledgement, even 
   // Direct, most-authoritative signal a v2-API-capable server can give -
   // must be trusted on its own, not only as a tiebreaker alongside method.
   const { app, plugin } = setup(t)
-  const { makeFakeRouter } = require('../test-support/fake-app')
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
   t.mock.timers.tick(60_000) // -> alert
@@ -329,7 +319,6 @@ test('real-world captured payload: status.acknowledged becomes true on a "warn" 
   // - see the note in escalation.test.js) but status.acknowledged is the
   // signal that actually matters, and it's true.
   const { app, plugin } = setup(t)
-  const { makeFakeRouter } = require('../test-support/fake-app')
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
   t.mock.timers.tick(60_000) // -> alert
@@ -358,7 +347,6 @@ test('real-world captured payload: full auto-escalation to emergency, then ackno
   // "sound" is stripped from method (unlike other stages, which lose
   // both) - "visual" stays - and status.acknowledged: true is present.
   const { app, plugin } = setup(t)
-  const { makeFakeRouter } = require('../test-support/fake-app')
   const router = makeFakeRouter()
   plugin.registerWithRouter(router)
   t.mock.timers.tick(60_000) // -> alert
