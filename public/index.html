@@ -222,9 +222,13 @@
     flex: 1;
     height: 100%;
     justify-content: center;
-    /* Room at the bottom for the progress bar overlaid on top of it -
-       see .progress-track below. */
-    padding-bottom: 40px;
+    /* Center the text within the space ABOVE the overlaid progress bar,
+       not within the full button - the bar's top edge sits 36px from the
+       button's bottom (24px inset + 12px bar incl. borders, see
+       .progress-track below), so the bottom padding has to exceed the
+       26px top padding by exactly that much for the flex centering to
+       land in the optical middle. */
+    padding-bottom: 62px;
   }
   /* Overlaid on the bottom of the button (main is position:relative and
      the button already fills its full height, so anchoring to main's
