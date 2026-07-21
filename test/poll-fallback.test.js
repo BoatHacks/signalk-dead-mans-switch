@@ -24,9 +24,7 @@ function setup(t, opts = {}) {
 test('a change that never reaches the delta bus is still caught by the next poll', (t) => {
   // Simulates exactly the real-world gap this fallback exists for: the
   // server's stored value changes (e.g. via SignalK's v2 Notifications
-  // API acknowledge action, or a delta from a non-preferred source that
-  // gets filtered out of the delta chain) without ever notifying our
-  // streambundle subscription.
+  // API acknowledge action) without ever notifying our subscription.
   const { app } = setup(t)
   t.mock.timers.tick(60_000) // -> alert
   assert.equal(app.lastValueFor(PATH).state, 'alert')

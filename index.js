@@ -27,12 +27,17 @@
 //
 // External changes on the notification path (another plugin, a client's
 // own PUT, or SignalK's v2 Notifications API acknowledge/silence/clear
-// actions) are watched two ways: an app.streambundle delta subscription
-// (instant when it works) and a periodic app.getSelfPath() poll (a
-// fallback for real-world gaps - a server may filter deltas from a
-// non-preferred source out of the delta chain before subscribers ever
-// see them, and the v2 API's actions may update a notification's
-// `status` without re-emitting a normal delta at all). Both funnel
+// actions) are watched two ways: an app.subscriptionmanager.subscribe()
+// delta subscription with sourcePolicy: 'all' (instant when it works),
+// and a periodic app.getSelfPath() poll (a fallback for a real-world gap
+// no subscription mechanism can close - the v2 API's actions may update
+// a notification's `status` without re-emitting a normal delta at all).
+// sourcePolicy: 'all' matters specifically because app.streambundle
+// (which this used before) only ever sees deltas from a path's
+// "preferred" source - deltas from any other source are filtered out of
+// the delta chain before streambundle subscribers ever see them, which
+// is likely why some real servers never fired the old subscription for
+// genuine external acknowledgements at all.  Both mechanisms funnel
 // through the same reconciliation logic below.
 
 const STAGES = ['alert', 'warn', 'alarm', 'emergency']
@@ -411,7 +416,9 @@ module.exports = function (app) {
   // above) come back through this same subscription like any other - they
   // are recognized (see isOwnDelta below) and ignored, so we don't
   // re-process our own writes or create a feedback loop.
-  let unsubscribeExternal = null
+  // subscriptionmanager.subscribe() takes an array and pushes its own
+  // unsubscribe function into it, rather than returning one directly.
+  let unsubscribes = []
   let pollTimer = null
 
   function isOwnDelta(delta) {
@@ -477,15 +484,11 @@ module.exports = function (app) {
     reconcileExternalValue(value, 'external delta')
   }
 
-  // Fallback for a real-world gap: a server may not redeliver every
-  // change on a notification path through app.streambundle's delta bus -
-  // e.g. deltas from a source that isn't the "preferred" one for the path
-  // can be filtered out of the delta chain entirely before subscribers
-  // ever see them, and SignalK's v2 Notifications API acknowledge/
-  // silence/clear actions may update the notification's `status` without
-  // re-emitting a normal delta at all. Polling app.getSelfPath() reads
-  // the actual current value directly, sidestepping whatever nuance of
-  // the delta chain would otherwise drop the change. Deliberately kept
+  // Fallback for a real-world gap no subscription mechanism can close:
+  // SignalK's v2 Notifications API acknowledge/silence/clear actions may
+  // update a notification's `status` without re-emitting a normal delta
+  // at all. Polling app.getSelfPath() reads the actual current value
+  // directly, sidestepping that entirely. Deliberately kept
   // alongside (not instead of) the delta subscription above - cheap
   // insurance, and instant when the delta path does work.
   const POLL_INTERVAL_MS = 2000
@@ -524,8 +527,35 @@ module.exports = function (app) {
       warnWindowSeconds: config('warnWindowSeconds', 60),
       alarmWindowSeconds: config('alarmWindowSeconds', 60),
     })
-    if (app.streambundle && typeof app.streambundle.getSelfBus === 'function') {
-      unsubscribeExternal = app.streambundle.getSelfBus(notificationPath).onValue(handleExternalNotificationChange)
+    if (app.subscriptionmanager && typeof app.subscriptionmanager.subscribe === 'function') {
+      unsubscribes = []
+      app.subscriptionmanager.subscribe(
+        {
+          context: 'vessels.self',
+          // The whole reason for using subscriptionmanager instead of
+          // app.streambundle: sourcePolicy is only honored here, and
+          // 'all' is what lets us see a delta regardless of which
+          // source wrote it, not just the path's "preferred" one.
+          sourcePolicy: 'all',
+          subscribe: [{ path: notificationPath, period: 1000 }],
+        },
+        unsubscribes,
+        (subscriptionError) => {
+          debugLog(`subscriptionmanager error subscribing to ${notificationPath}:`, subscriptionError)
+        },
+        (delta) => {
+          ;(delta.updates || []).forEach((update) => {
+            ;(update.values || []).forEach(({ path, value }) => {
+              if (path !== notificationPath) return
+              handleExternalNotificationChange({
+                value,
+                $source: update.$source || delta.$source,
+                source: update.source || delta.source,
+              })
+            })
+          })
+        }
+      )
       debugLog(`subscribed to external changes on ${notificationPath}`)
     }
     if (typeof app.getSelfPath === 'function') {
@@ -551,10 +581,8 @@ module.exports = function (app) {
     debugLog('plugin.stop()')
     clearTimer()
     timer = null
-    if (unsubscribeExternal) {
-      unsubscribeExternal()
-      unsubscribeExternal = null
-    }
+    unsubscribes.forEach((f) => f())
+    unsubscribes = []
     if (pollTimer) {
       clearInterval(pollTimer)
       pollTimer = null

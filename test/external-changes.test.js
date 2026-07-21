@@ -25,6 +25,17 @@ test('subscribes to the notification path on start', (t) => {
   assert.equal(app._busSubscriberCount(PATH), 1)
 })
 
+test('subscribes with sourcePolicy: "all" - the whole point of using subscriptionmanager instead of streambundle', (t) => {
+  const { app } = setup(t)
+  const sub = app._lastSubscription()
+  assert.equal(sub.sourcePolicy, 'all')
+  assert.equal(sub.context, 'vessels.self')
+  assert.deepEqual(
+    sub.subscribe.map((s) => s.path),
+    [PATH]
+  )
+})
+
 test('unsubscribes on stop', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
   const app = makeFakeApp()

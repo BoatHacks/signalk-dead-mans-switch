@@ -129,15 +129,15 @@ something else writes to it directly, e.g. another plugin, a webapp
 doing its own PUT, a device publishing straight to SignalK, or a
 client using SignalK's v2 Notifications API. Watched two ways:
 
-- an `app.streambundle` delta subscription - instant when it works
-- a periodic `app.getSelfPath()` poll (every 2s) as a fallback - real
-  servers can filter deltas from a non-preferred source out of the
-  delta chain before subscribers ever see them, and the v2
-  Notifications API's acknowledge/silence/clear actions may update a
-  notification's `status` without re-emitting a normal delta at all.
-  Polling reads the actual current value directly, sidestepping
-  whichever of those gaps would otherwise mean a real acknowledgement
-  or external change is silently missed.
+- an `app.subscriptionmanager.subscribe()` delta subscription, with
+  `sourcePolicy: 'all'` so it sees a delta regardless of which source
+  wrote it (not just the path's "preferred" one, which is all
+  `app.streambundle` - a lower-level API this used before - ever sees)
+- a periodic `app.getSelfPath()` poll (every 2s) as a further fallback -
+  the v2 Notifications API's acknowledge/silence/clear actions may
+  update a notification's `status` without re-emitting a normal delta
+  at all, which no subscription mechanism can see. Polling reads the
+  actual current value directly, sidestepping that gap.
 
 Either path reacts the same way to what it sees:
 

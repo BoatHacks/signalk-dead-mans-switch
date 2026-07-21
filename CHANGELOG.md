@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- External-change detection now subscribes via
+  `app.subscriptionmanager.subscribe()` with `sourcePolicy: 'all'`
+  instead of `app.streambundle.getSelfBus()`. `streambundle` only ever
+  sees deltas from a path's "preferred" source - deltas from any other
+  source are filtered out of the delta chain before it ever sees them,
+  which was likely part of why some real servers never fired the old
+  subscription for genuine external acknowledgements at all. The
+  `app.getSelfPath()` poll fallback (for the separate case of v2 API
+  actions that don't emit a delta at all) is unchanged.
+
 ### Fixed
 - Compatibility with older Chromium (e.g. 69, still common on marine
   plotters and older tablets):
