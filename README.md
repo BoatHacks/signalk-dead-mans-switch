@@ -119,6 +119,21 @@ Each method optionally takes a `reason` string used in debug logging
 state on every call - it's not a stale snapshot from when the API was
 announced.
 
+There's also a standard SignalK PUT handler registered directly on the
+notification path itself - the idiomatic way to act on any SignalK
+path, no knowledge of this plugin's PropertyValues name required:
+
+```js
+app.putSelfPath('security.deadmansswitch', { status: { acknowledged: true } })
+```
+
+The PUT's value is interpreted exactly like an external delta on the
+path (see "Interoperating with other plugins/devices" below) - a stage
+value escalates to that stage, an acknowledgement-equivalent value (or
+no value at all) acknowledges. Always reports the PUT as completed,
+even when it was a no-op (e.g. while disarmed) - same as `POST /ack`
+returning `200` with `ok: false` rather than failing the request.
+
 ## REST API
 
 All endpoints are mounted at `/plugins/signalk-dead-mans-switch`.

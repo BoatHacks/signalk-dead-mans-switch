@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Standard SignalK PUT handler registered directly on the notification
+  path (`app.registerPutHandler`) - the idiomatic way for another
+  plugin (or SignalK core) to act on this switch via
+  `app.putSelfPath(notificationPath, value)`, no knowledge of this
+  plugin's PropertyValues API needed. The PUT's value is interpreted
+  exactly like an external delta on the path (a stage value escalates,
+  an ack-equivalent value or no value at all acknowledges). Always
+  reports `COMPLETED`, even for a no-op (e.g. while disarmed).
 - In-process API for other plugins, via SignalK's PropertyValues
   mechanism (`app.emitPropertyValue`/`app.onPropertyValues`) - announced
   once on start as `signalk-dead-mans-switch-api`: `ack()`, `arm()`,

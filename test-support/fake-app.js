@@ -9,6 +9,7 @@ function makeFakeApp({ echoSource } = {}) {
   const subCallbacks = {} // path -> [deltaCallback, ...], registered via subscriptionmanager.subscribe()
   const pathValues = {} // path -> current value, for getSelfPath()
   const propertyValues = {} // name -> [value, ...] - full history, matching the real API
+  const putHandlers = {} // path -> [handler, ...], registered via registerPutHandler()
   let lastSubscription = null
 
   // Dispatches a full delta ({updates: [{$source, source, values: [{path, value}]}]})
@@ -41,6 +42,23 @@ function makeFakeApp({ echoSource } = {}) {
     },
     setPluginStatus(msg) {
       statuses.push(msg)
+    },
+    // Records the handler so tests can invoke it directly via
+    // _callPutHandler(), mirroring how the real server would call it on
+    // an incoming PUT request.
+    registerPutHandler(context, path, handler, source) {
+      putHandlers[path] = putHandlers[path] || []
+      putHandlers[path].push(handler)
+    },
+    _callPutHandler(path, value) {
+      const handlers = putHandlers[path] || []
+      if (handlers.length === 0) throw new Error(`no PUT handler registered for ${path}`)
+      // Real servers would only ever have (and call) one; tests can
+      // still see how many got registered via _putHandlerCount().
+      return handlers[handlers.length - 1]('vessels.self', path, value, () => {})
+    },
+    _putHandlerCount(path) {
+      return (putHandlers[path] || []).length
     },
     // Records every emission under `name`, matching the real API's
     // append-to-history semantics (a consumer's onPropertyValues callback

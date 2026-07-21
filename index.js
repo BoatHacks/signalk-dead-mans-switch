@@ -521,6 +521,25 @@ module.exports = function (app) {
     reconcileExternalValue(value, 'external poll')
   }
 
+  // PUT handler on the notification path itself - the idiomatic SignalK
+  // way for another plugin (or SignalK core machinery) to act on this
+  // switch via app.putSelfPath(notificationPath, value, cb), no
+  // PropertyValues/REST-specific knowledge of this plugin required, just
+  // the standard PUT mechanism any SignalK path can support. The PUT's
+  // value is interpreted exactly like an external delta on this path
+  // (reconcileExternalValue - see the top-of-file comment and the
+  // external-change subscription above for the exact rules): a stage
+  // value escalates to that stage, an ack-equivalent value (or anything
+  // else, including no value at all) acknowledges. Always reports the
+  // PUT as COMPLETED - even a no-op (e.g. while disarmed) is not an
+  // error, the same way POST /ack while disarmed returns 200 with
+  // ok: false rather than failing the request.
+  function handleNotificationPut(context, path, value, callback) {
+    debugLog('INPUT PUT on notification path:', value)
+    reconcileExternalValue(value, 'PUT handler')
+    return { state: 'COMPLETED', statusCode: 200 }
+  }
+
   plugin.start = function (opts) {
     options = opts || {}
     notificationPath = `notifications.${config('notificationPath', 'security.deadmansswitch')}`
@@ -570,6 +589,15 @@ module.exports = function (app) {
     if (typeof app.emitPropertyValue === 'function') {
       app.emitPropertyValue(PROPERTY_VALUE_API_NAME, buildExternalApi())
       debugLog(`announced in-process API via PropertyValues as "${PROPERTY_VALUE_API_NAME}"`)
+    }
+    if (typeof app.registerPutHandler === 'function') {
+      // No documented way to unregister a PUT handler - if the plugin
+      // restarts (reconfiguration, etc.) this may register more than
+      // once. Not harmful: reconcileExternalValue's own dedup
+      // (lastReconciledSignature) and the arm()/escalateTo() calls it
+      // can trigger are safe to run redundantly, just mildly wasteful.
+      app.registerPutHandler('vessels.self', notificationPath, handleNotificationPut)
+      debugLog(`registered PUT handler on ${notificationPath}`)
     }
     if (config('enabled', true)) {
       arm('start (enabled)')
