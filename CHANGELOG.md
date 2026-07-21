@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-21
+
 ### Added
 - Standard SignalK PUT handler registered directly on the notification
   path (`app.registerPutHandler`) - the idiomatic way for another
