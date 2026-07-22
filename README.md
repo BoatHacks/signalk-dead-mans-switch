@@ -256,6 +256,16 @@ Needs a plugin like `signalk-derived-data` actually publishing one of
 those paths - this plugin only reads them, it doesn't calculate sun
 position itself.
 
+### Navico chart plotters (`?mode=day|night`)
+
+Navico plotters (B&G, Simrad, Lowrance) pass their current display mode
+to hosted web pages as a `?mode=day` or `?mode=night` URL parameter.
+When present, it forces the light/dark theme accordingly and outranks
+every other theme source - the stored preference, the OS setting, and
+the automatic sun-position recommendation above - since the host device
+is stating what its screen is actually showing right now. Any other
+value of `mode` is ignored.
+
 ### Debug logging
 
 Logs every state transition (with its reason), every notification
