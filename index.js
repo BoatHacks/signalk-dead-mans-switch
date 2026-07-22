@@ -358,6 +358,66 @@ module.exports = function (app) {
     }
   }
 
+  // ---- Optional integration with signalk-alert-manager ----------------------
+  //
+  // hatlabs/signalk-alert-manager, if installed, auto-ingests our
+  // notifications.* delta and turns it into a managed alert - but its
+  // generic mapping treats our "alert" stage as its lowest priority
+  // ("Caution"), which doesn't require acknowledgment there. That's a
+  // real mismatch for us: "alert" is our FIRST check-in prompt, arguably
+  // the most important one to actually get acknowledged. So when
+  // app.alertManager is present, this raises/updates a correctly-
+  // prioritized alert directly via its plugin API instead of relying on
+  // that generic ingestion - alert/warn both -> its "warning" priority
+  // (the lowest one that still requires acknowledgment there), alarm/
+  // emergency map directly.
+  //
+  // Uses the SAME alert `path` (notification path with the "notifications."
+  // prefix stripped) its own generic ingestion would derive, so there's
+  // one alert entry to look at rather than two - not a separate one. This
+  // is a best-effort, fire-and-forget side channel (raiseAlert/
+  // acknowledgeAlert/clearCondition are all async in their API but
+  // nothing here needs to block on them) built entirely from reading
+  // their README, not verified against a running instance - if the exact
+  // call shapes turn out to be wrong, this fails silently via the
+  // .catch() below and this plugin's own behavior is entirely unaffected
+  // either way.
+  const ALERT_MANAGER_PRIORITY = { alert: 'warning', warn: 'warning', alarm: 'alarm', emergency: 'emergency' }
+  let alertManagerAlertId = null
+
+  function alertManagerPath() {
+    return notificationPath.replace(/^notifications\./, '')
+  }
+
+  function raiseAlertManagerAlert(stage) {
+    if (!app.alertManager || typeof app.alertManager.raiseAlert !== 'function') return
+    app.alertManager
+      .raiseAlert({
+        $source: plugin.id,
+        path: alertManagerPath(),
+        priority: ALERT_MANAGER_PRIORITY[stage],
+        message: STAGE_MESSAGE[stage],
+        group: 'deadmansswitch',
+        latching: true,
+      })
+      .then((alert) => {
+        alertManagerAlertId = alert && alert.id
+        debugLog(`alert-manager: raised/updated ${ALERT_MANAGER_PRIORITY[stage]} alert for "${stage}"`)
+      })
+      .catch((err) => debugLog('alert-manager: raiseAlert failed:', err && err.message))
+  }
+
+  function resolveAlertManagerAlert() {
+    if (!app.alertManager || !alertManagerAlertId) return
+    const id = alertManagerAlertId
+    alertManagerAlertId = null
+    Promise.resolve()
+      .then(() => (typeof app.alertManager.acknowledgeAlert === 'function' ? app.alertManager.acknowledgeAlert(id) : null))
+      .then(() => (typeof app.alertManager.clearCondition === 'function' ? app.alertManager.clearCondition(id) : null))
+      .then(() => debugLog(`alert-manager: resolved alert ${id}`))
+      .catch((err) => debugLog('alert-manager: resolving alert failed:', err && err.message))
+  }
+
   // Arms the switch: drops back to plain "armed" (no stage) and starts the
   // check-in interval countdown, then publishes a resting "armed"
   // notification. `state` is updated FIRST, before the notification
@@ -379,6 +439,7 @@ module.exports = function (app) {
     app.setPluginStatus(statusMessage())
     publishRestingNotification('armed')
     persistState()
+    resolveAlertManagerAlert()
   }
 
   // Fires once the check-in interval elapses: raises the first escalation
@@ -410,6 +471,7 @@ module.exports = function (app) {
     app.setPluginStatus(statusMessage())
     publishNotification(stage)
     persistState()
+    raiseAlertManagerAlert(stage)
   }
 
   // Acknowledges the switch, from any stage (or even while merely armed -
@@ -435,6 +497,7 @@ module.exports = function (app) {
     app.setPluginStatus(statusMessage())
     publishRestingNotification('disarmed')
     persistState()
+    resolveAlertManagerAlert()
   }
 
   function secondsRemaining() {

@@ -287,6 +287,33 @@ switch starts up armed or disarmed at all; persistence only decides
 *which stage* to resume within that, not whether to arm in the first
 place.
 
+## signalk-alert-manager integration
+
+If [hatlabs/signalk-alert-manager](https://github.com/hatlabs/signalk-alert-manager)
+is installed, this plugin raises/updates a correctly-prioritized alert
+there directly via its plugin API on every escalation, rather than
+relying on alert-manager's own generic notification ingestion - that
+ingestion maps our `alert` stage to its lowest priority ("Caution"),
+which doesn't require acknowledgment there, a real mismatch since
+`alert` is our first check-in prompt and arguably the most important
+one to actually get acknowledged.
+
+| This switch's stage | alert-manager priority |
+| -------------------- | ----------------------- |
+| `alert`, `warn`      | `warning`               |
+| `alarm`              | `alarm`                 |
+| `emergency`          | `emergency`             |
+
+Acknowledging or disarming this switch acknowledges and clears the
+alert-manager alert too, so it doesn't linger there separately once
+this switch has already been reset.
+
+This integration is entirely optional (feature-detected - nothing
+changes if alert-manager isn't installed) and best-effort (a failed
+call is logged via debug output and otherwise ignored; this plugin's
+own behavior is unaffected either way). It's built from reading
+alert-manager's README, not verified against a running instance of it.
+
 ## App icon
 
 `public/assets/icons/icon-512.png` is used as the browser favicon and

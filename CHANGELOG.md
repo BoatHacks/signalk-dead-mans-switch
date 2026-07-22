@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Optional integration with
+  [signalk-alert-manager](https://github.com/hatlabs/signalk-alert-manager),
+  if installed (feature-detected via `app.alertManager`): raises/updates
+  a correctly-prioritized alert there directly on every escalation
+  (`alert`/`warn` -> `warning`, `alarm` -> `alarm`, `emergency` ->
+  `emergency`), rather than relying on its generic notification
+  ingestion, which maps our `alert` stage to its lowest priority
+  ("Caution") and doesn't require acknowledgment there - a real
+  mismatch, since `alert` is our first check-in prompt. Acknowledging
+  or disarming this switch also acknowledges and clears the alert there.
+  Best-effort and entirely optional - unaffected if alert-manager isn't
+  installed, and built from reading its README rather than verified
+  against a running instance.
 - State persistence across restarts: the current stage and its deadline
   are written to a JSON file under `app.getDataDirPath()` whenever
   either changes, and restored on start. If the plugin's process
