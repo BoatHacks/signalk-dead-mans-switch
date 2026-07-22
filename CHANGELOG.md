@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- State persistence across restarts: the current stage and its deadline
+  are written to a JSON file under `app.getDataDirPath()` whenever
+  either changes, and restored on start. If the plugin's process
+  restarts mid-escalation (a crash, an update, the server restarting),
+  it resumes the same stage with the same remaining time instead of
+  silently starting over from "armed" - previously any in-progress
+  escalation was lost on restart. If the deadline had already passed
+  while stopped, it escalates one stage forward immediately on start
+  rather than trying to replay an unknown amount of downtime. The
+  "armed on plugin start" config option is still the sole authority on
+  whether to arm at all; persistence only decides which stage to
+  resume within that decision. Inspired by a look at
+  [signalk-alert-manager](https://github.com/hatlabs/signalk-alert-manager)'s
+  persistence model, adapted to a plain JSON file rather than SQLite
+  since this plugin only ever needs to track one thing.
+
 ## [0.6.0] - 2026-07-21
 
 ### Added

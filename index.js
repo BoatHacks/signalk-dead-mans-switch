@@ -39,6 +39,17 @@
 // is likely why some real servers never fired the old subscription for
 // genuine external acknowledgements at all.  Both mechanisms funnel
 // through the same reconciliation logic below.
+//
+// The current stage and its deadline are persisted to a small JSON file
+// under app.getDataDirPath() every time either changes, and restored on
+// start (see the "enabled" branch of plugin.start()) - so if the plugin's
+// process restarts mid-escalation (a crash, an update, the server
+// restarting), it resumes exactly where it left off instead of silently
+// forgetting an in-progress escalation and starting over from "armed".
+// If the persisted deadline already passed while the plugin was stopped,
+// it escalates one stage forward immediately on start (as if that timer
+// had just fired) rather than trying to replay however many stages might
+// have elapsed during an unknown amount of downtime.
 
 const STAGES = ['alert', 'warn', 'alarm', 'emergency']
 
@@ -47,6 +58,12 @@ const STAGES = ['alert', 'warn', 'alarm', 'emergency']
 // colliding with another plugin's arbitrary property names.
 const PROPERTY_VALUE_API_NAME = 'signalk-dead-mans-switch-api'
 
+// File persisted state (stage + deadline) is written to under
+// app.getDataDirPath() - see persistState()/loadPersistedState() below.
+const STATE_FILE_NAME = 'state.json'
+
+const fs = require('fs')
+const path = require('path')
 const openapi = require('./openApi.json')
 
 const STAGE_MESSAGE = {
@@ -310,22 +327,58 @@ module.exports = function (app) {
     }
   }
 
+  // Persists just enough to resume mid-escalation across a restart: the
+  // current stage and its deadline (or null for disarmed/emergency, which
+  // don't have one). Best-effort - a write failure is logged, never
+  // thrown; losing persistence is far less bad than crashing the switch
+  // meant to be watching for exactly this kind of failure.
+  function persistState() {
+    if (typeof app.getDataDirPath !== 'function') return
+    try {
+      const dir = app.getDataDirPath()
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, STATE_FILE_NAME), JSON.stringify({ state, deadlineAt }), 'utf8')
+    } catch (err) {
+      debugLog('failed to persist state:', err && err.message)
+    }
+  }
+
+  // Returns { state, deadlineAt } from a previous run, or null if there's
+  // nothing usable (no host support, no file yet, corrupt JSON, etc.) -
+  // any of those just mean "start fresh", not an error worth surfacing.
+  function loadPersistedState() {
+    if (typeof app.getDataDirPath !== 'function') return null
+    try {
+      const raw = fs.readFileSync(path.join(app.getDataDirPath(), STATE_FILE_NAME), 'utf8')
+      const parsed = JSON.parse(raw)
+      if (!parsed || typeof parsed.state !== 'string') return null
+      return parsed
+    } catch (err) {
+      return null
+    }
+  }
+
   // Arms the switch: drops back to plain "armed" (no stage) and starts the
   // check-in interval countdown, then publishes a resting "armed"
   // notification. `state` is updated FIRST, before the notification
   // write - so that even in the reentrancy edge case the guard above
   // doesn't catch, any self-echo that reaches
   // handleExternalNotificationChange sees the already-correct new state
-  // rather than a stale one.
-  function arm(reason) {
+  // rather than a stale one. `overrideMs`, when given, resumes with that
+  // many ms left instead of the full configured interval - used only
+  // when restoring a persisted "armed" countdown that hadn't elapsed yet
+  // when the plugin stopped.
+  function arm(reason, overrideMs) {
     const previousState = state
     clearTimer()
     state = 'armed'
-    deadlineAt = Date.now() + intervalMs()
-    timer = setTimeout(raisePrompt, intervalMs())
-    debugLog(`STATE ${previousState} -> armed (${reason || 'unspecified'}); next check-in in ${intervalMs() / 1000}s`)
+    const ms = overrideMs !== undefined ? overrideMs : intervalMs()
+    deadlineAt = Date.now() + ms
+    timer = setTimeout(raisePrompt, ms)
+    debugLog(`STATE ${previousState} -> armed (${reason || 'unspecified'}); next check-in in ${Math.round(ms / 1000)}s`)
     app.setPluginStatus(statusMessage())
     publishRestingNotification('armed')
+    persistState()
   }
 
   // Fires once the check-in interval elapses: raises the first escalation
@@ -334,7 +387,11 @@ module.exports = function (app) {
     escalateTo(0, 'check-in interval elapsed')
   }
 
-  function escalateTo(stageIndex, reason) {
+  // `overrideMs`, when given, resumes with that many ms left in the
+  // current stage's window instead of the full configured window - used
+  // only when restoring a persisted escalation that hadn't reached its
+  // deadline yet when the plugin stopped.
+  function escalateTo(stageIndex, reason, overrideMs) {
     const previousState = state
     const stage = STAGES[stageIndex]
     state = stage
@@ -345,12 +402,14 @@ module.exports = function (app) {
       deadlineAt = null
       debugLog(`STATE ${previousState} -> ${stage} (${reason || 'unspecified'}); terminal, no further auto-escalation`)
     } else {
-      deadlineAt = Date.now() + stageWindowMs(stageIndex)
-      timer = setTimeout(() => escalateTo(stageIndex + 1, 'stage window elapsed'), stageWindowMs(stageIndex))
-      debugLog(`STATE ${previousState} -> ${stage} (${reason || 'unspecified'}); escalates further in ${stageWindowMs(stageIndex) / 1000}s unless acknowledged`)
+      const ms = overrideMs !== undefined ? overrideMs : stageWindowMs(stageIndex)
+      deadlineAt = Date.now() + ms
+      timer = setTimeout(() => escalateTo(stageIndex + 1, 'stage window elapsed'), ms)
+      debugLog(`STATE ${previousState} -> ${stage} (${reason || 'unspecified'}); escalates further in ${Math.round(ms / 1000)}s unless acknowledged`)
     }
     app.setPluginStatus(statusMessage())
     publishNotification(stage)
+    persistState()
   }
 
   // Acknowledges the switch, from any stage (or even while merely armed -
@@ -375,6 +434,7 @@ module.exports = function (app) {
     debugLog(`STATE ${previousState} -> disarmed (${reason || 'unspecified'})`)
     app.setPluginStatus(statusMessage())
     publishRestingNotification('disarmed')
+    persistState()
   }
 
   function secondsRemaining() {
@@ -540,6 +600,54 @@ module.exports = function (app) {
     return { state: 'COMPLETED', statusCode: 200 }
   }
 
+  // Called on start when the switch should be armed. Resumes a persisted
+  // mid-escalation stage if one exists, rather than always starting fresh
+  // from "armed" - see the top-of-file comment for why. Deliberately does
+  // NOT try to replay every stage that might have elapsed during an
+  // unknown amount of downtime: if the persisted deadline already passed,
+  // it just escalates one stage forward immediately (as if that timer had
+  // fired right at startup), same as raisePrompt()/the timer callback
+  // would have done had the process kept running.
+  function restoreOrArm() {
+    const persisted = loadPersistedState()
+    if (!persisted) {
+      arm('start (enabled)')
+      return
+    }
+
+    const remainingMs = persisted.deadlineAt ? persisted.deadlineAt - Date.now() : null
+    const stageIndex = STAGES.indexOf(persisted.state)
+
+    if (stageIndex !== -1) {
+      // Was mid-escalation (alert/warn/alarm/emergency) when it stopped.
+      if (stageIndex >= STAGES.length - 1) {
+        // Emergency: terminal, no deadline to resume - just restore it.
+        state = 'emergency'
+        app.setPluginStatus(statusMessage())
+        publishNotification('emergency')
+        persistState()
+        debugLog('restored persisted state: emergency (terminal)')
+      } else if (remainingMs !== null && remainingMs > 0) {
+        escalateTo(stageIndex, 'restored from persisted state', remainingMs)
+        debugLog(`restored persisted state: ${persisted.state}, ${Math.round(remainingMs / 1000)}s remaining`)
+      } else {
+        // Deadline already passed while stopped - escalate one stage
+        // forward now, same as if that timer had just fired.
+        escalateTo(stageIndex + 1, 'restored from persisted state; deadline passed while stopped')
+      }
+    } else if (persisted.state === 'armed' && remainingMs !== null && remainingMs > 0) {
+      arm('restored from persisted state', remainingMs)
+    } else if (persisted.state === 'armed') {
+      // Check-in interval already elapsed while stopped - raise the first
+      // prompt now, same as if the timer had just fired.
+      escalateTo(0, 'restored from persisted state; check-in interval elapsed while stopped')
+    } else {
+      // Persisted state was "disarmed", or something unrecognized -
+      // nothing meaningful to resume, just arm fresh.
+      arm('start (enabled)')
+    }
+  }
+
   plugin.start = function (opts) {
     options = opts || {}
     notificationPath = `notifications.${config('notificationPath', 'security.deadmansswitch')}`
@@ -600,7 +708,7 @@ module.exports = function (app) {
       debugLog(`registered PUT handler on ${notificationPath}`)
     }
     if (config('enabled', true)) {
-      arm('start (enabled)')
+      restoreOrArm()
     } else {
       // Reuses disarm() itself (rather than duplicating its body) so the
       // resting "disarmed" notification is always published consistently,
