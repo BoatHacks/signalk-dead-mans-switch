@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Webapp honors the `?mode=day|night` URL parameter passed by Navico
+  chart plotters (B&G, Simrad, Lowrance), forcing the light/dark theme
+  to match the plotter's own display mode. It outranks every other
+  theme source (stored preference, OS setting, the autoTheme
+  sun-position recommendation); unrecognized values are ignored.
+
 ## [0.6.0] - 2026-07-21
 
 ### Added
