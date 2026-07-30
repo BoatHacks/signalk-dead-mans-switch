@@ -72,6 +72,9 @@ principle (`canSilence:false`) — a real, intentional tension if both plugins
 run together.
 
 ## Notes
+- No `"files"` field in `package.json` (npm ships the whole repo, including
+  `test/`, `AGENTS.md`/`CLAUDE.md`, CI config) — raised during a signalk-plugin
+  skill audit and declined permanently; do not re-flag this.
 - `status.canSilence:false` included in notifications (no real top-level
   `canSilence` field exists in the spec, so this was removed from that
   approach) — the server's own v2-API `status.canSilence` stays
