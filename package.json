@@ -3,6 +3,13 @@
   "version": "0.6.0",
   "description": "The dead man's switch requires you to push a button, and escalates notifications from alert all the way up to emergency if you don't",
   "main": "index.js",
+  "files": [
+    "index.js",
+    "openApi.json",
+    "public",
+    "docs/screenshots",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "start": "node index.js",
     "test": "node --test --test-force-exit"

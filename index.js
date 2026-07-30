@@ -384,13 +384,34 @@ module.exports = function (app) {
   // either way.
   const ALERT_MANAGER_PRIORITY = { alert: 'warning', warn: 'warning', alarm: 'alarm', emergency: 'emergency' }
   let alertManagerAlertId = null
+  // Bumped on every raiseAlertManagerAlert() call, so a raiseAlert() promise
+  // that's still in flight when a NEWER raise starts (fast re-escalation)
+  // knows it's been superseded once it finally settles, rather than
+  // clobbering alertManagerAlertId with a stale id.
+  let alertManagerGeneration = 0
+  // The highest generation resolveAlertManagerAlert() has been called for.
+  // Guards the opposite race: if ack()/disarm() runs BEFORE a raiseAlert()
+  // call it should have resolved has settled, alertManagerAlertId is still
+  // null at that point, so there's nothing to acknowledge yet - without
+  // this, the id would land moments later and sit there unacknowledged
+  // until some future ack swept it up.
+  let alertManagerResolvedThroughGeneration = 0
 
   function alertManagerPath() {
     return notificationPath.replace(/^notifications\./, '')
   }
 
+  function resolveAlertManagerAlertById(id) {
+    Promise.resolve()
+      .then(() => (typeof app.alertManager.acknowledgeAlert === 'function' ? app.alertManager.acknowledgeAlert(id) : null))
+      .then(() => (typeof app.alertManager.clearCondition === 'function' ? app.alertManager.clearCondition(id) : null))
+      .then(() => debugLog(`alert-manager: resolved alert ${id}`))
+      .catch((err) => debugLog('alert-manager: resolving alert failed:', err && err.message))
+  }
+
   function raiseAlertManagerAlert(stage) {
     if (!app.alertManager || typeof app.alertManager.raiseAlert !== 'function') return
+    const generation = ++alertManagerGeneration
     app.alertManager
       .raiseAlert({
         $source: plugin.id,
@@ -401,21 +422,33 @@ module.exports = function (app) {
         latching: true,
       })
       .then((alert) => {
-        alertManagerAlertId = alert && alert.id
-        debugLog(`alert-manager: raised/updated ${ALERT_MANAGER_PRIORITY[stage]} alert for "${stage}"`)
+        const id = alert && alert.id
+        if (!id) return
+        if (generation <= alertManagerResolvedThroughGeneration) {
+          // The switch was already acknowledged/disarmed before this raise
+          // settled - resolve it immediately instead of leaving it to
+          // linger in alert-manager until some later ack happens to catch it.
+          debugLog(`alert-manager: raise for "${stage}" settled after already being acknowledged - resolving immediately`)
+          resolveAlertManagerAlertById(id)
+          return
+        }
+        if (generation === alertManagerGeneration) {
+          alertManagerAlertId = id
+          debugLog(`alert-manager: raised/updated ${ALERT_MANAGER_PRIORITY[stage]} alert for "${stage}"`)
+        }
+        // else: superseded by a newer raise that started before this one
+        // settled - that raise owns alertManagerAlertId now.
       })
       .catch((err) => debugLog('alert-manager: raiseAlert failed:', err && err.message))
   }
 
   function resolveAlertManagerAlert() {
-    if (!app.alertManager || !alertManagerAlertId) return
+    if (!app.alertManager) return
+    alertManagerResolvedThroughGeneration = alertManagerGeneration
+    if (!alertManagerAlertId) return
     const id = alertManagerAlertId
     alertManagerAlertId = null
-    Promise.resolve()
-      .then(() => (typeof app.alertManager.acknowledgeAlert === 'function' ? app.alertManager.acknowledgeAlert(id) : null))
-      .then(() => (typeof app.alertManager.clearCondition === 'function' ? app.alertManager.clearCondition(id) : null))
-      .then(() => debugLog(`alert-manager: resolved alert ${id}`))
-      .catch((err) => debugLog('alert-manager: resolving alert failed:', err && err.message))
+    resolveAlertManagerAlertById(id)
   }
 
   // Arms the switch: drops back to plain "armed" (no stage) and starts the

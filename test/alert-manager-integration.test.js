@@ -131,3 +131,81 @@ test('uses the configured notificationPath (minus the "notifications." prefix) a
 
   assert.equal(app._alertManagerCalls.raiseAlert[0].path, 'navigation.watchAlive')
 })
+
+test('acknowledges a raiseAlert that settles AFTER the switch was already acked (race)', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
+  const app = makeFakeApp({ withAlertManager: true })
+  let resolveRaise
+  app.alertManager.raiseAlert = (request) => {
+    app._alertManagerCalls.raiseAlert.push(request)
+    return new Promise((resolve) => {
+      resolveRaise = () => resolve({ id: 'fake-alert-1', ...request })
+    })
+  }
+  const plugin = buildPlugin(app)
+  plugin.start(DEFAULT_OPTS)
+  t.after(() => plugin.stop())
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+
+  t.mock.timers.tick(60_000) // -> alert; raiseAlert() called but its promise is still pending
+
+  // The switch gets acknowledged before raiseAlert() has settled -
+  // resolveAlertManagerAlert() runs while alertManagerAlertId is still
+  // null, so at this point there's nothing yet to acknowledge/clear.
+  router.call('post', '/ack', {})
+  await settle()
+  assert.equal(app._alertManagerCalls.acknowledgeAlert.length, 0)
+  assert.equal(app._alertManagerCalls.clearCondition.length, 0)
+
+  // raiseAlert() finally settles - the fix must resolve this alert
+  // immediately rather than leaving it dangling until some future ack.
+  resolveRaise()
+  await settle()
+  assert.deepEqual(app._alertManagerCalls.acknowledgeAlert, ['fake-alert-1'])
+  assert.deepEqual(app._alertManagerCalls.clearCondition, ['fake-alert-1'])
+
+  // And a later, genuine ack (against a freshly-settled raise) must not
+  // try to re-resolve the earlier alert a second time.
+  t.mock.timers.tick(60_000) // -> alert again; new raiseAlert() pending
+  resolveRaise()
+  await settle()
+  router.call('post', '/ack', {})
+  await settle()
+  assert.equal(app._alertManagerCalls.acknowledgeAlert.length, 2)
+  assert.equal(app._alertManagerCalls.clearCondition.length, 2)
+})
+
+test('a superseded raiseAlert (re-escalated before the first settles) does not clobber the newer alert id', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
+  const app = makeFakeApp({ withAlertManager: true })
+  const resolvers = []
+  app.alertManager.raiseAlert = (request) => {
+    app._alertManagerCalls.raiseAlert.push(request)
+    return new Promise((resolve) => {
+      resolvers.push((id) => resolve({ id, ...request }))
+    })
+  }
+  const plugin = buildPlugin(app)
+  plugin.start(DEFAULT_OPTS)
+  t.after(() => plugin.stop())
+  const router = makeFakeRouter()
+  plugin.registerWithRouter(router)
+
+  t.mock.timers.tick(60_000) // -> alert; first raiseAlert() pending
+  t.mock.timers.tick(30_000) // -> warn; second raiseAlert() pending
+  await settle()
+  assert.equal(resolvers.length, 2)
+
+  // The OLDER raise settles last (out of order) - it must not become the
+  // tracked alert id once a newer raise has already superseded it.
+  resolvers[1]('fake-alert-newer')
+  await settle()
+  resolvers[0]('fake-alert-older')
+  await settle()
+
+  router.call('post', '/ack', {})
+  await settle()
+  assert.deepEqual(app._alertManagerCalls.acknowledgeAlert, ['fake-alert-newer'])
+  assert.deepEqual(app._alertManagerCalls.clearCondition, ['fake-alert-newer'])
+})
