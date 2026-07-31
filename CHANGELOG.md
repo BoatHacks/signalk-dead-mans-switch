@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-07-31
+
 ### Added
 - Optional integration with
   [signalk-alert-manager](https://github.com/hatlabs/signalk-alert-manager),
@@ -33,6 +35,18 @@ All notable changes to this project will be documented in this file.
   [signalk-alert-manager](https://github.com/hatlabs/signalk-alert-manager)'s
   persistence model, adapted to a plain JSON file rather than SQLite
   since this plugin only ever needs to track one thing.
+
+### Fixed
+- Two race conditions in the signalk-alert-manager integration that
+  could leave an alert dangling there unacknowledged, or track the
+  wrong alert id, when timing was unlucky: (1) an ack/disarm arriving
+  before a pending `raiseAlert()` call had settled would find nothing
+  to acknowledge yet, and the id would land moments later with no
+  further ack to catch it - now resolved immediately once the raise
+  settles, if the switch was already acknowledged/disarmed by then.
+  (2) a `raiseAlert()` call settling out of order (e.g. after a newer
+  one, following fast re-escalation) could overwrite the current alert
+  id with a stale one - now ignored if superseded by a newer raise.
 
 ## [0.6.0] - 2026-07-21
 
