@@ -2,7 +2,11 @@
 // function, plus a fake Express-like router for registerWithRouter tests.
 // Only the surface this plugin actually touches is implemented.
 
-function makeFakeApp({ echoSource } = {}) {
+const fs = require('fs')
+const path = require('path')
+const os = require('os')
+
+function makeFakeApp({ echoSource, dataDir, withAlertManager } = {}) {
   const messages = []
   const statuses = []
   const debugCalls = []
@@ -10,6 +14,11 @@ function makeFakeApp({ echoSource } = {}) {
   const pathValues = {} // path -> current value, for getSelfPath()
   const propertyValues = {} // name -> [value, ...] - full history, matching the real API
   const putHandlers = {} // path -> [handler, ...], registered via registerPutHandler()
+  // A real temp directory (not just an in-memory stub) so persistState()/
+  // loadPersistedState() exercise real fs.writeFileSync/readFileSync calls.
+  // Pass `dataDir` explicitly (the same path across two makeFakeApp() calls)
+  // to simulate a plugin restart sharing the same on-disk state.
+  const dataDirPath = dataDir || fs.mkdtempSync(path.join(os.tmpdir(), 'dms-test-'))
   let lastSubscription = null
 
   // Dispatches a full delta ({updates: [{$source, source, values: [{path, value}]}]})
@@ -21,7 +30,7 @@ function makeFakeApp({ echoSource } = {}) {
     ;(subCallbacks[path] || []).forEach((cb) => cb(delta))
   }
 
-  return {
+  const fakeApp = {
     // A real SignalK server may redeliver a plugin's own handleMessage()
     // write back through the same subscription its subscriptionmanager
     // subscription uses, synchronously, before this call even returns -
@@ -84,6 +93,10 @@ function makeFakeApp({ echoSource } = {}) {
     getSelfPath(path) {
       return pathValues[path]
     },
+    getDataDirPath() {
+      return dataDirPath
+    },
+    _dataDirPath: dataDirPath,
     // Mirrors app.subscriptionmanager.subscribe(subscription, unsubscribes,
     // errorCallback, deltaCallback): registers deltaCallback for every path
     // in subscription.subscribe[], and pushes an unsubscribe function into
@@ -140,6 +153,32 @@ function makeFakeApp({ echoSource } = {}) {
       return undefined
     },
   }
+
+  if (withAlertManager) {
+    // Stand-in for hatlabs/signalk-alert-manager's plugin API
+    // (app.alertManager.raiseAlert/acknowledgeAlert/clearCondition), all
+    // async in the real API. Assigns incrementing fake ids and records
+    // every call so tests can assert on them directly.
+    const alertManagerCalls = { raiseAlert: [], acknowledgeAlert: [], clearCondition: [] }
+    let nextAlertId = 1
+    fakeApp.alertManager = {
+      raiseAlert(request) {
+        alertManagerCalls.raiseAlert.push(request)
+        return Promise.resolve({ id: `fake-alert-${nextAlertId++}`, ...request })
+      },
+      acknowledgeAlert(id) {
+        alertManagerCalls.acknowledgeAlert.push(id)
+        return Promise.resolve()
+      },
+      clearCondition(id) {
+        alertManagerCalls.clearCondition.push(id)
+        return Promise.resolve()
+      },
+    }
+    fakeApp._alertManagerCalls = alertManagerCalls
+  }
+
+  return fakeApp
 }
 
 function makeFakeRouter() {

@@ -277,6 +277,53 @@ server admin UI's debug log settings, or the `DEBUG` environment
 variable including `signalk-dead-mans-switch`. There's no separate
 toggle in this plugin's own config screen.
 
+## Persistence
+
+The current stage and its deadline are written to a small JSON file
+under the plugin's data directory (`app.getDataDirPath()`) every time
+either changes, and restored on start. If the plugin's process
+restarts mid-escalation - a crash, an update, the server restarting -
+it resumes exactly where it left off (same stage, same remaining time)
+instead of silently forgetting an in-progress escalation and starting
+over from "armed". If the deadline had already passed while the plugin
+was stopped, it escalates one stage forward immediately on start,
+rather than trying to replay however many stages might have elapsed
+during an unknown amount of downtime.
+
+An explicit disarm is still respected on restart in the sense that
+there's no stale escalation left to resume - but the "armed on plugin
+start" config option remains the actual authority on whether the
+switch starts up armed or disarmed at all; persistence only decides
+*which stage* to resume within that, not whether to arm in the first
+place.
+
+## signalk-alert-manager integration
+
+If [hatlabs/signalk-alert-manager](https://github.com/hatlabs/signalk-alert-manager)
+is installed, this plugin raises/updates a correctly-prioritized alert
+there directly via its plugin API on every escalation, rather than
+relying on alert-manager's own generic notification ingestion - that
+ingestion maps our `alert` stage to its lowest priority ("Caution"),
+which doesn't require acknowledgment there, a real mismatch since
+`alert` is our first check-in prompt and arguably the most important
+one to actually get acknowledged.
+
+| This switch's stage | alert-manager priority |
+| -------------------- | ----------------------- |
+| `alert`, `warn`      | `warning`               |
+| `alarm`              | `alarm`                 |
+| `emergency`          | `emergency`             |
+
+Acknowledging or disarming this switch acknowledges and clears the
+alert-manager alert too, so it doesn't linger there separately once
+this switch has already been reset.
+
+This integration is entirely optional (feature-detected - nothing
+changes if alert-manager isn't installed) and best-effort (a failed
+call is logged via debug output and otherwise ignored; this plugin's
+own behavior is unaffected either way). It's built from reading
+alert-manager's README, not verified against a running instance of it.
+
 ## App icon
 
 `public/assets/icons/icon-512.png` is used as the browser favicon and

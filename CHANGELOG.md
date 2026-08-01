@@ -10,6 +10,49 @@ All notable changes to this project will be documented in this file.
   to match the plotter's own display mode. It outranks every other
   theme source (stored preference, OS setting, the autoTheme
   sun-position recommendation); unrecognized values are ignored.
+## [0.6.1] - 2026-07-31
+
+### Added
+- Optional integration with
+  [signalk-alert-manager](https://github.com/hatlabs/signalk-alert-manager),
+  if installed (feature-detected via `app.alertManager`): raises/updates
+  a correctly-prioritized alert there directly on every escalation
+  (`alert`/`warn` -> `warning`, `alarm` -> `alarm`, `emergency` ->
+  `emergency`), rather than relying on its generic notification
+  ingestion, which maps our `alert` stage to its lowest priority
+  ("Caution") and doesn't require acknowledgment there - a real
+  mismatch, since `alert` is our first check-in prompt. Acknowledging
+  or disarming this switch also acknowledges and clears the alert there.
+  Best-effort and entirely optional - unaffected if alert-manager isn't
+  installed, and built from reading its README rather than verified
+  against a running instance.
+- State persistence across restarts: the current stage and its deadline
+  are written to a JSON file under `app.getDataDirPath()` whenever
+  either changes, and restored on start. If the plugin's process
+  restarts mid-escalation (a crash, an update, the server restarting),
+  it resumes the same stage with the same remaining time instead of
+  silently starting over from "armed" - previously any in-progress
+  escalation was lost on restart. If the deadline had already passed
+  while stopped, it escalates one stage forward immediately on start
+  rather than trying to replay an unknown amount of downtime. The
+  "armed on plugin start" config option is still the sole authority on
+  whether to arm at all; persistence only decides which stage to
+  resume within that decision. Inspired by a look at
+  [signalk-alert-manager](https://github.com/hatlabs/signalk-alert-manager)'s
+  persistence model, adapted to a plain JSON file rather than SQLite
+  since this plugin only ever needs to track one thing.
+
+### Fixed
+- Two race conditions in the signalk-alert-manager integration that
+  could leave an alert dangling there unacknowledged, or track the
+  wrong alert id, when timing was unlucky: (1) an ack/disarm arriving
+  before a pending `raiseAlert()` call had settled would find nothing
+  to acknowledge yet, and the id would land moments later with no
+  further ack to catch it - now resolved immediately once the raise
+  settles, if the switch was already acknowledged/disarmed by then.
+  (2) a `raiseAlert()` call settling out of order (e.g. after a newer
+  one, following fast re-escalation) could overwrite the current alert
+  id with a stale one - now ignored if superseded by a newer raise.
 
 ## [0.6.0] - 2026-07-21
 
