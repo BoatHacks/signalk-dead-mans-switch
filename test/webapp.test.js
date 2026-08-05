@@ -586,6 +586,47 @@ test('without ?embedded=true, data-embedded is not set', async (t) => {
   assert.equal(doc.documentElement.hasAttribute('data-embedded'), false)
 })
 
+test('?mode=night (Navico plotters) forces the dark theme', async (t) => {
+  const fetchImpl = await statusFetch('armed', 900, DEFAULT_CONFIG)
+  const { doc, unmount } = await mountWebapp(fetchImpl, {
+    url: 'http://localhost/plugins/signalk-dead-mans-switch/?mode=night',
+  })
+  t.after(unmount)
+
+  assert.equal(doc.documentElement.getAttribute('data-theme'), 'dark')
+})
+
+test('?mode=day (Navico plotters) forces the light theme', async (t) => {
+  const fetchImpl = await statusFetch('armed', 900, DEFAULT_CONFIG)
+  const { doc, unmount } = await mountWebapp(fetchImpl, {
+    url: 'http://localhost/plugins/signalk-dead-mans-switch/?mode=day',
+  })
+  t.after(unmount)
+
+  assert.equal(doc.documentElement.getAttribute('data-theme'), 'light')
+})
+
+test('?mode= outranks the autoTheme recommendation from the server', async (t) => {
+  const fetchImpl = await statusFetch('armed', 900, { ...DEFAULT_CONFIG, autoTheme: true }, 'light')
+  const { doc, unmount } = await mountWebapp(fetchImpl, {
+    url: 'http://localhost/plugins/signalk-dead-mans-switch/?mode=night',
+  })
+  t.after(unmount)
+
+  assert.equal(doc.documentElement.getAttribute('data-theme'), 'dark')
+})
+
+test('an unrecognized ?mode= value is ignored and the normal default applies', async (t) => {
+  const fetchImpl = await statusFetch('armed', 900, DEFAULT_CONFIG)
+  const { doc, unmount } = await mountWebapp(fetchImpl, {
+    url: 'http://localhost/plugins/signalk-dead-mans-switch/?mode=disco',
+  })
+  t.after(unmount)
+
+  // Fresh jsdom: no stored preference, no dark OS preference -> light.
+  assert.equal(doc.documentElement.getAttribute('data-theme'), 'light')
+})
+
 test('embedded mode CSS hides the toolbar, transparent background, and fills the viewport', () => {
   const html = fs.readFileSync(INDEX_HTML, 'utf8')
   assert.match(html, /\[data-embedded\][^{]*\{[^}]*background:\s*transparent/)

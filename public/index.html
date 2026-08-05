@@ -364,7 +364,21 @@ function MoonIcon() {
   </svg>`
 }
 
+// Navico chart plotters pass their own current display mode to hosted
+// web pages as ?mode=day or ?mode=night. When present it outranks every
+// other theme source (stored preference, OS setting, the plugin's
+// autoTheme recommendation): the host device is stating what its screen
+// is showing right now, and mismatching it would ruin night vision.
+function getUrlThemeOverride() {
+  const mode = new URLSearchParams(window.location.search).get('mode')
+  if (mode === 'day') return 'light'
+  if (mode === 'night') return 'dark'
+  return null
+}
+
 function getPreferredTheme() {
+  const override = getUrlThemeOverride()
+  if (override) return override
   let stored = null
   try {
     stored = window.localStorage.getItem(THEME_STORAGE_KEY)
@@ -504,6 +518,10 @@ function App() {
   // does nothing at all if the option is off or the server has no
   // recommendation yet (e.g. neither environment path is populated).
   useEffect(() => {
+    // A ?mode=day|night URL override (Navico plotters) outranks the
+    // sun-based recommendation - the host device knows what its screen
+    // is actually showing.
+    if (getUrlThemeOverride()) return
     if (!status || !status.config || !status.config.autoTheme) return
     const recommendation = status.themeRecommendation
     if ((recommendation === 'light' || recommendation === 'dark') && recommendation !== theme) {
