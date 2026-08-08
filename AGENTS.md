@@ -1,5 +1,3 @@
-@no-slop.md
-
 # signalk-dead-mans-switch
 
 Watch dead man's switch SignalK plugin: periodic "you still there?" check-in
