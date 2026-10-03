@@ -1,0 +1,31 @@
+name: Publish to npm
+
+# Publishes to npm via OIDC trusted publishing (no NPM_TOKEN). The npm
+# package's Trusted Publisher settings must point at this repo and this
+# exact workflow filename (publish-npm.yml).
+on:
+  release:
+    types: [published]
+  # Manual run, e.g. to publish a version whose release already exists.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - run: npm test
+
+      - run: npm publish
