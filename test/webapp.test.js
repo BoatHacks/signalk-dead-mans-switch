@@ -742,7 +742,7 @@ test('a rejected login keeps the form and shows an error', async (t) => {
   assert.match(doc.querySelector('.login-error').textContent, /wrong username or password/i)
 })
 
-test('a 403 shows the form with a permission message and a cancel button', async (t) => {
+test('a 403 from the status poll shows the permission message', async (t) => {
   const { fetchImpl } = authFetch({ statusCode: 403 })
   const { doc, unmount } = await mountWebapp(fetchImpl)
   t.after(unmount)
@@ -750,6 +750,40 @@ test('a 403 shows the form with a permission message and a cancel button', async
   const form = doc.querySelector('form.login-form')
   assert.ok(form)
   assert.match(form.textContent, /not allowed/i)
+})
+
+// Servers with allow_readonly let anonymous clients read /status, so polling
+// keeps succeeding while the ack itself is refused with 401.
+function readonlyFetch() {
+  return async (url, opts = {}) => {
+    const u = String(url)
+    if (u.endsWith('/status')) {
+      return {
+        ok: true,
+        status: 200,
+        url,
+        json: async () => ({ state: 'alert', secondsRemaining: 30, deadlineAt: Date.now() + 30000, notificationPath: 'n', config: DEFAULT_CONFIG }),
+      }
+    }
+    if (opts.method === 'POST') return { ok: false, status: 401, url, json: async () => ({}) }
+    return { ok: true, status: 200, url, json: async () => ({}) }
+  }
+}
+
+test('a 401 from a button press keeps the login form open across status polls until cancelled', async (t) => {
+  const { doc, unmount } = await mountWebapp(readonlyFetch())
+  t.after(unmount)
+  assert.ok(!doc.querySelector('form.login-form'))
+
+  doc.querySelector('button.state-button').click()
+  await tick(150)
+  assert.ok(doc.querySelector('form.login-form'), 'form should appear after the refused ack')
+
+  // Several 1s polls succeed in the meantime - the form must survive them.
+  await tick(2300)
+  assert.ok(doc.querySelector('form.login-form'), 'form must not vanish on the next poll')
+  assert.ok(!doc.querySelector('button.state-button').classList.contains('stale'), 'live status is not stale')
+
   doc.querySelector('button.login-cancel').click()
   await tick()
   assert.ok(!doc.querySelector('form.login-form'))

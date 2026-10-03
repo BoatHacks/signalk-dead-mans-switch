@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-03
+
+### Fixed
+- Sign-in form no longer disappears again right after it appears. On
+  servers that let anonymous/readonly clients read `/status`, the 401
+  from a button press (ack/arm/disarm) was cleared by the very next
+  successful status poll. An auth error from an action now stays until
+  you sign in or press the new Cancel button; only auth errors from the
+  status poll itself clear automatically.
+
 ## [0.6.3] - 2026-10-03
 
 ### Added

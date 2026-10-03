@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="version" content="0.6.3" />
+<meta name="version" content="0.6.4" />
 <link rel="icon" type="image/png" href="assets/icons/icon-512.png">
 <title>Dead Man's Switch</title>
 <style>
@@ -447,7 +447,7 @@ function getPreferredTheme() {
 // same-origin fetch below - so no token handling is needed here.
 const LOGIN_URL = '/signalk/v1/auth/login'
 
-function LoginForm({ forbidden, onLoggedIn, onCancel }) {
+function LoginForm({ forbidden, cancellable, onLoggedIn, onCancel }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
@@ -498,7 +498,7 @@ function LoginForm({ forbidden, onLoggedIn, onCancel }) {
       </label>
       ${error && html`<div class="login-error" role="alert">${error}</div>`}
       <button type="submit" disabled=${busy}>${busy ? 'Signing in\u2026' : 'Sign in'}</button>
-      ${forbidden && html`<button type="button" class="login-cancel" onClick=${onCancel}>Cancel</button>`}
+      ${cancellable && html`<button type="button" class="login-cancel" onClick=${onCancel}>Cancel</button>`}
     </form>
   `
 }
@@ -517,8 +517,10 @@ function App() {
   const [status, setStatus] = useState(null)
   const [connectionError, setConnectionError] = useState(null)
   const [lastGoodAt, setLastGoodAt] = useState(null)
-  // null, or the HTTP status (401 not logged in / 403 logged in without
-  // permission) the server last answered with. Shows the login form.
+  // null, or { code, fromAction }: the HTTP status the server answered with
+  // (401 not logged in / 403 logged in without permission) and whether it
+  // came from a button press rather than the status poll. Shows the login
+  // form.
   const [authError, setAuthError] = useState(null)
   const [theme, setTheme] = useState(getPreferredTheme())
   const pollRef = useRef(null)
@@ -659,9 +661,15 @@ function App() {
   // 401/403 are not "connection lost" - the server answered fine, it just
   // wants a login - so they show the sign-in form instead of the
   // connection banner.
-  function handleError(e) {
+  function handleError(e, fromAction = false) {
     if (e.httpStatus === 401 || e.httpStatus === 403) {
-      setAuthError(e.httpStatus)
+      // Never let a poll failure overwrite an action's error (the poll
+      // would then clear it again), and don't re-render for an identical one.
+      setAuthError((cur) =>
+        cur && (cur.fromAction ? !fromAction || cur.code === e.httpStatus : cur.code === e.httpStatus && !fromAction)
+          ? cur
+          : { code: e.httpStatus, fromAction }
+      )
       setConnectionError(null)
     } else {
       setConnectionError(e.message)
@@ -674,10 +682,12 @@ function App() {
       .then((r) => r.json())
       .then((s) => {
         setStatus(s)
-        // A 401 means the status poll itself needs a login, so a successful
-        // poll proves it's resolved. A 403 came from an action (e.g. ack) by
-        // an account that can still read status - keep that until dismissed.
-        setAuthError((cur) => (cur === 401 ? null : cur))
+        // An auth error from the poll itself is resolved by a successful
+        // poll. One from an action (e.g. ack) is not: the server may allow
+        // anonymous/readonly status reads (so polling keeps succeeding)
+        // while still refusing the action - keep the form until the person
+        // signs in or cancels.
+        setAuthError((cur) => (cur && cur.fromAction ? cur : null))
         setConnectionError(null)
         setLastGoodAt(Date.now())
       })
@@ -700,7 +710,7 @@ function App() {
     fetch(`${BASE}${path}`, { method: 'POST', cache: 'no-store' })
       .then(checkOk)
       .then(() => loadStatus())
-      .catch(handleError)
+      .catch((e) => handleError(e, true))
   }
 
   function handleDisarm() {
@@ -729,7 +739,7 @@ function App() {
       <div class="toolbar"><${ThemeToggle} theme=${theme} setTheme=${setTheme} /></div>
       <main>
         ${authError &&
-        html`<${LoginForm} forbidden=${authError === 403} onLoggedIn=${() => { setAuthError(null); loadStatus() }} onCancel=${() => setAuthError(null)} />`}
+        html`<${LoginForm} forbidden=${authError.code === 403} cancellable=${authError.fromAction} onLoggedIn=${() => { setAuthError(null); loadStatus() }} onCancel=${() => setAuthError(null)} />`}
         ${!authError && connectionError
           ? html`<div class="connection-banner">
               <strong>\u26a0 Can\u2019t reach the SignalK server.</strong>
@@ -766,7 +776,7 @@ function App() {
     </div>
     <main>
       ${authError &&
-      html`<${LoginForm} forbidden=${authError === 403} onLoggedIn=${() => { setAuthError(null); loadStatus() }} onCancel=${() => setAuthError(null)} />`}
+      html`<${LoginForm} forbidden=${authError.code === 403} cancellable=${authError.fromAction} onLoggedIn=${() => { setAuthError(null); loadStatus() }} onCancel=${() => setAuthError(null)} />`}
       ${connectionError &&
       html`<div class="connection-banner">
         <strong>\u26a0 Connection to the SignalK server lost.</strong>
@@ -777,7 +787,7 @@ function App() {
       </div>`}
 
       <button
-        class=${`state-button ${stage === 'emergency' ? 'blink' : ''} ${connectionError || authError === 401 ? 'stale' : ''}`}
+        class=${`state-button ${stage === 'emergency' ? 'blink' : ''} ${connectionError || (authError && !authError.fromAction && authError.code === 401) ? 'stale' : ''}`}
         style=${{ background: color, color: textColor }}
         onClick=${handleStateButton}
       >
@@ -789,7 +799,7 @@ function App() {
         <span class=${`state-cta ${stage === 'emergency' ? 'emergency-cta' : ''}`}>${ACK_LABEL[stage] || 'Tap to acknowledge'}</span>
       </button>
 
-      <div class=${`progress-track ${connectionError || authError === 401 ? 'stale' : ''}`}>
+      <div class=${`progress-track ${connectionError || (authError && !authError.fromAction && authError.code === 401) ? 'stale' : ''}`}>
         <div class="progress-fill" style=${{ width: `${fillPct}%`, background: color }}></div>
       </div>
     </main>
