@@ -84,3 +84,19 @@ test('getOpenApi() documents exactly the routes registerWithRouter exposes', (t)
   // required or the docs would present the wrong base path.
   assert.equal(spec.servers[0].url, '/plugins/signalk-dead-mans-switch')
 })
+
+test('routes are registered with readonly (status) and readwrite (actions) access when the server supports router.access', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] })
+  const plugin = buildPlugin(makeFakeApp())
+  plugin.start({ checkIntervalMinutes: 1 })
+  t.after(() => plugin.stop())
+  const router = makeFakeRouter({ withAccess: true })
+  plugin.registerWithRouter(router)
+  assert.deepEqual(router.accessLevels, {
+    'get /status': 'readonly',
+    'post /ack': 'readwrite',
+    'post /disarm': 'readwrite',
+    'post /arm': 'readwrite',
+  })
+  assert.equal(router.call('get', '/status').body.state, 'armed')
+})

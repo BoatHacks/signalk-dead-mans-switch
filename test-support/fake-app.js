@@ -181,10 +181,11 @@ function makeFakeApp({ echoSource, dataDir, withAlertManager } = {}) {
   return fakeApp
 }
 
-function makeFakeRouter() {
+function makeFakeRouter({ withAccess = false } = {}) {
   const routes = { get: {}, post: {} }
   const middlewares = []
-  return {
+  const accessLevels = {}
+  const router = {
     use(fn) {
       middlewares.push(fn)
     },
@@ -229,6 +230,27 @@ function makeFakeRouter() {
       return res
     },
   }
+  if (withAccess) {
+    // Mirrors SignalK's PluginRouter.access(level): returns a registrar
+    // whose get/post register the route and record its access level.
+    router.access = (level) => {
+      const registrar = {
+        get(path, handler) {
+          accessLevels[`get ${path}`] = level
+          router.get(path, handler)
+          return registrar
+        },
+        post(path, handler) {
+          accessLevels[`post ${path}`] = level
+          router.post(path, handler)
+          return registrar
+        },
+      }
+      return registrar
+    }
+    router.accessLevels = accessLevels
+  }
+  return router
 }
 
 module.exports = { makeFakeApp, makeFakeRouter }

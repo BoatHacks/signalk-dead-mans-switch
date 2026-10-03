@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-03
+
+### Fixed
+- REST API routes are now registered with explicit access levels instead
+  of the server's admin-only default: `/status` is `readonly`, and
+  `/ack`, `/arm`, `/disarm` are `readwrite`, so non-admin accounts can
+  use the webapp.
+  Servers without `router.access` keep their previous behavior.
+
 ### Added
 - Webapp honors the `?mode=day|night` URL parameter passed by Navico
   chart plotters (B&G, Simrad, Lowrance), forcing the light/dark theme

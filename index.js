@@ -947,7 +947,16 @@ module.exports = function (app) {
       })
     }
 
-    router.get('/status', (req, res) => {
+    // SignalK servers that support per-route access levels (router.access)
+    // gate plugin routes behind admin unless told otherwise. Declare
+    // /status readonly (any authenticated account can view it) and the
+    // state-changing routes readwrite. Older servers lack router.access
+    // and keep their own default behavior.
+    const hasAccess = typeof router.access === 'function'
+    const readApi = hasAccess ? router.access('readonly') : router
+    const api = hasAccess ? router.access('readwrite') : router
+
+    readApi.get('/status', (req, res) => {
       debugLog('INPUT REST GET /status')
       const body = {
         state,
@@ -968,7 +977,7 @@ module.exports = function (app) {
       res.json(body)
     })
 
-    router.post('/ack', (req, res) => {
+    api.post('/ack', (req, res) => {
       debugLog('INPUT REST POST /ack')
       const acked = ack('REST /ack')
       const body = { ok: acked, state, secondsRemaining: secondsRemaining() }
@@ -976,7 +985,7 @@ module.exports = function (app) {
       res.json(body)
     })
 
-    router.post('/disarm', (req, res) => {
+    api.post('/disarm', (req, res) => {
       debugLog('INPUT REST POST /disarm')
       disarm('REST /disarm')
       const body = { ok: true, state }
@@ -984,7 +993,7 @@ module.exports = function (app) {
       res.json(body)
     })
 
-    router.post('/arm', (req, res) => {
+    api.post('/arm', (req, res) => {
       debugLog('INPUT REST POST /arm')
       arm('REST /arm')
       const body = { ok: true, state, secondsRemaining: secondsRemaining() }
