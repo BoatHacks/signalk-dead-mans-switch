@@ -41,7 +41,8 @@ fallback, computed server-side); disarm button with confirm(); connection-lost
 banner (dims, never blanks); daylight colors (alert=light yellow,
 warn=bright yellow, alarm/emergency=fire-engine red with blinking yellow
 outline at emergency); "TAP HERE" CTA at emergency; `?embedded=true` iframe
-mode (from collaborator hoeken's PR).
+mode (from collaborator hoeken's PR); sign-in form on 401/403 (POSTs to
+`/signalk/v1/auth/login`, session cookie does the rest).
 
 ## Sounds
 Emergency siren (loganzsound, CC0) loops at full volume; alarm-intercom.wav

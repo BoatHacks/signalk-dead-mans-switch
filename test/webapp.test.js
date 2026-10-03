@@ -655,3 +655,129 @@ test('embedded progress bar overlay does not run off the right edge (width:auto 
   assert.match(rule, /left:\s*24px/)
   assert.match(rule, /right:\s*24px/)
 })
+
+// ---- login form on authentication errors ------------------------------------
+
+function authFetch({ statusCode = 401, loginStatus = 200 } = {}) {
+  const calls = []
+  let loggedIn = false
+  const fetchImpl = async (url, opts = {}) => {
+    calls.push({ url: String(url), opts })
+    const u = String(url)
+    if (u.endsWith('/signalk/v1/auth/login')) {
+      if (loginStatus === 200) loggedIn = true
+      return { ok: loginStatus === 200, status: loginStatus, url, json: async () => ({ token: 't' }) }
+    }
+    if (u.endsWith('/status')) {
+      if (!loggedIn) return { ok: false, status: statusCode, url, json: async () => ({}) }
+      return {
+        ok: true,
+        status: 200,
+        url,
+        json: async () => ({
+          state: 'armed',
+          secondsRemaining: 60,
+          deadlineAt: Date.now() + 60000,
+          notificationPath: 'notifications.security.deadmansswitch',
+          config: DEFAULT_CONFIG,
+        }),
+      }
+    }
+    return { ok: true, status: 200, url, json: async () => ({}) }
+  }
+  return { fetchImpl, calls }
+}
+
+function setInput(doc, selector, value) {
+  const el = doc.querySelector(selector)
+  el.value = value
+  el.dispatchEvent(new doc.defaultView.Event('input', { bubbles: true }))
+}
+
+const tick = (ms = 80) => new Promise((resolve) => setTimeout(resolve, ms))
+
+test('a 401 from the server shows the login form, not the connection-lost banner', async (t) => {
+  const { fetchImpl } = authFetch()
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  assert.ok(doc.querySelector('form.login-form'), 'login form should be shown')
+  assert.ok(doc.querySelector('input[name="username"]'))
+  assert.ok(doc.querySelector('input[name="password"]'))
+  assert.ok(!doc.querySelector('.connection-banner'))
+  assert.doesNotMatch(doc.getElementById('app').textContent, /Loading/)
+})
+
+test('submitting the login form posts credentials to the SignalK login endpoint, then loads the status', async (t) => {
+  const { fetchImpl, calls } = authFetch()
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  setInput(doc, 'input[name="username"]', 'anna')
+  setInput(doc, 'input[name="password"]', 'secret')
+  await tick()
+  doc.querySelector('form.login-form').dispatchEvent(new doc.defaultView.Event('submit', { bubbles: true, cancelable: true }))
+  await tick(200)
+
+  const login = calls.find((c) => c.url.endsWith('/signalk/v1/auth/login'))
+  assert.ok(login, 'login request should be sent')
+  assert.equal(login.opts.method, 'POST')
+  assert.deepEqual(JSON.parse(login.opts.body), { username: 'anna', password: 'secret', rememberMe: true })
+  assert.ok(!doc.querySelector('form.login-form'), 'form should disappear after a successful login')
+  assert.match(doc.querySelector('button.state-button').textContent, /ARMED/)
+})
+
+test('a rejected login keeps the form and shows an error', async (t) => {
+  const { fetchImpl } = authFetch({ loginStatus: 401 })
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  setInput(doc, 'input[name="username"]', 'anna')
+  setInput(doc, 'input[name="password"]', 'wrong')
+  await tick()
+  doc.querySelector('form.login-form').dispatchEvent(new doc.defaultView.Event('submit', { bubbles: true, cancelable: true }))
+  await tick(200)
+
+  assert.ok(doc.querySelector('form.login-form'))
+  assert.match(doc.querySelector('.login-error').textContent, /wrong username or password/i)
+})
+
+test('a 403 shows the form with a permission message and a cancel button', async (t) => {
+  const { fetchImpl } = authFetch({ statusCode: 403 })
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+
+  const form = doc.querySelector('form.login-form')
+  assert.ok(form)
+  assert.match(form.textContent, /not allowed/i)
+  doc.querySelector('button.login-cancel').click()
+  await tick()
+  assert.ok(!doc.querySelector('form.login-form'))
+})
+
+test('losing the session after a good load shows the form above the dimmed last known state', async (t) => {
+  let authed = true
+  const fetchImpl = async (url) => {
+    if (String(url).endsWith('/status')) {
+      if (!authed) return { ok: false, status: 401, url, json: async () => ({}) }
+      return {
+        ok: true,
+        status: 200,
+        url,
+        json: async () => ({ state: 'warn', secondsRemaining: 30, deadlineAt: Date.now() + 30000, notificationPath: 'n', config: DEFAULT_CONFIG }),
+      }
+    }
+    return { ok: true, status: 200, url, json: async () => ({}) }
+  }
+  const { doc, unmount } = await mountWebapp(fetchImpl)
+  t.after(unmount)
+  assert.ok(!doc.querySelector('form.login-form'))
+
+  authed = false
+  await tick(1100)
+  assert.ok(doc.querySelector('form.login-form'))
+  assert.ok(!doc.querySelector('.connection-banner'))
+  const stateBtn = doc.querySelector('button.state-button')
+  assert.match(stateBtn.textContent, /WARNING/)
+  assert.ok(stateBtn.classList.contains('stale'))
+})

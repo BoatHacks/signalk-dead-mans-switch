@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-03
+
+### Added
+- Webapp shows a sign-in form when the SignalK server answers 401 or
+  403 (instead of a misleading "connection lost" banner). It logs in
+  through the server's own `/signalk/v1/auth/login`, which sets the
+  session cookie, so no token is stored by the page. A 403 (account
+  lacks permission) shows the form with a permission message and a
+  cancel button; a session lost mid-watch shows the form above the
+  dimmed last known state.
+
 ## [0.6.2] - 2026-10-03
 
 ### Fixed

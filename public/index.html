@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="version" content="0.6.2" />
+<meta name="version" content="0.6.3" />
 <link rel="icon" type="image/png" href="assets/icons/icon-512.png">
 <title>Dead Man's Switch</title>
 <style>
@@ -213,6 +213,57 @@
   }
   .loading-note { color: var(--text-muted); font-size: 13px; }
 
+  /* Sign-in card, shown when the server answers 401/403. Same alarm-tinted
+     treatment as the connection banner - "you can't see/ack this" is just
+     as important to notice. */
+  .login-form {
+    width: 100%;
+    background: var(--surface);
+    border: 2px solid var(--stage-alarm);
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+  }
+  .login-form > * + * { margin-top: 10px; }
+  .login-form strong { color: var(--stage-alarm); font-size: 15px; }
+  .login-form label { display: flex; flex-direction: column; font-size: 12px; color: var(--text-muted); }
+  .login-form label > input { margin-top: 3px; }
+  .login-form input[type="text"],
+  .login-form input[type="password"] {
+    font: inherit;
+    font-size: 16px;
+    padding: 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface-alt);
+    color: var(--text);
+  }
+  .login-form label.login-remember { flex-direction: row; align-items: center; }
+  .login-form label.login-remember > input { margin: 0 8px 0 0; }
+  .login-form .login-error { color: var(--stage-alarm); font-size: 13px; }
+  .login-form button[type="submit"] {
+    background: var(--accent);
+    color: var(--on-accent-text);
+    border: 0;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .login-form button.login-cancel {
+    background: none;
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .login-form button[type="submit"]:disabled { opacity: 0.6; cursor: default; }
+
   /* ---------- embedded mode (?embedded=true) ----------
      For hosting inside an iframe on a dashboard: transparent page
      background, no toolbar (arm/disarm + theme controls), and the state
@@ -391,6 +442,67 @@ function getPreferredTheme() {
   return prefersDark ? 'dark' : 'light'
 }
 
+// The SignalK server's own login endpoint. On success it sets an httpOnly
+// session cookie, which the browser then sends automatically with every
+// same-origin fetch below - so no token handling is needed here.
+const LOGIN_URL = '/signalk/v1/auth/login'
+
+function LoginForm({ forbidden, onLoggedIn, onCancel }) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [remember, setRemember] = useState(true)
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  function submit(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    fetch(LOGIN_URL, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, rememberMe: remember }),
+    })
+      .then((res) => {
+        if (res.ok) {
+          setPassword('')
+          onLoggedIn()
+        } else if (res.status === 429) {
+          setError('Too many login attempts. Wait a few minutes and try again.')
+        } else if (res.status === 401) {
+          setError('Wrong username or password.')
+        } else {
+          setError(`Login failed: HTTP ${res.status}`)
+        }
+      })
+      .catch((err) => setError(`Login failed: ${err.message}`))
+      .then(() => setBusy(false))
+  }
+
+  return html`
+    <form class="login-form" onSubmit=${submit}>
+      <strong>${forbidden ? 'This account is not allowed to do that.' : 'Sign in to the SignalK server'}</strong>
+      <span>${forbidden ? 'Sign in with an account that has read/write permission.' : 'The server requires a login to show or change the switch.'}</span>
+      <label>Username
+        <input type="text" name="username" autocomplete="username" autocapitalize="none" required
+          value=${username} onInput=${(e) => setUsername(e.target.value)} />
+      </label>
+      <label>Password
+        <input type="password" name="password" autocomplete="current-password" required
+          value=${password} onInput=${(e) => setPassword(e.target.value)} />
+      </label>
+      <label class="login-remember">
+        <input type="checkbox" checked=${remember} onChange=${(e) => setRemember(e.target.checked)} />
+        Stay signed in
+      </label>
+      ${error && html`<div class="login-error" role="alert">${error}</div>`}
+      <button type="submit" disabled=${busy}>${busy ? 'Signing in\u2026' : 'Sign in'}</button>
+      ${forbidden && html`<button type="button" class="login-cancel" onClick=${onCancel}>Cancel</button>`}
+    </form>
+  `
+}
+
 function ThemeToggle({ theme, setTheme }) {
   const label = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
   return html`
@@ -405,6 +517,9 @@ function App() {
   const [status, setStatus] = useState(null)
   const [connectionError, setConnectionError] = useState(null)
   const [lastGoodAt, setLastGoodAt] = useState(null)
+  // null, or the HTTP status (401 not logged in / 403 logged in without
+  // permission) the server last answered with. Shows the login form.
+  const [authError, setAuthError] = useState(null)
   const [theme, setTheme] = useState(getPreferredTheme())
   const pollRef = useRef(null)
   const audioRef = useRef(null)
@@ -533,8 +648,24 @@ function App() {
   // status - without this check a 404 from a wrong path would silently
   // leave the page showing stale/blank state forever.
   function checkOk(res) {
-    if (!res.ok) throw new Error(`Request to ${res.url} failed: HTTP ${res.status}`)
+    if (!res.ok) {
+      const err = new Error(`Request to ${res.url} failed: HTTP ${res.status}`)
+      err.httpStatus = res.status
+      throw err
+    }
     return res
+  }
+
+  // 401/403 are not "connection lost" - the server answered fine, it just
+  // wants a login - so they show the sign-in form instead of the
+  // connection banner.
+  function handleError(e) {
+    if (e.httpStatus === 401 || e.httpStatus === 403) {
+      setAuthError(e.httpStatus)
+      setConnectionError(null)
+    } else {
+      setConnectionError(e.message)
+    }
   }
 
   function loadStatus() {
@@ -543,6 +674,10 @@ function App() {
       .then((r) => r.json())
       .then((s) => {
         setStatus(s)
+        // A 401 means the status poll itself needs a login, so a successful
+        // poll proves it's resolved. A 403 came from an action (e.g. ack) by
+        // an account that can still read status - keep that until dismissed.
+        setAuthError((cur) => (cur === 401 ? null : cur))
         setConnectionError(null)
         setLastGoodAt(Date.now())
       })
@@ -552,7 +687,7 @@ function App() {
       // and the .stale styling below) so the person can tell the
       // difference between "everything's fine" and "we just don't know
       // anymore", without losing the last real information either way.
-      .catch((e) => setConnectionError(e.message))
+      .catch(handleError)
   }
 
   useEffect(() => {
@@ -565,7 +700,7 @@ function App() {
     fetch(`${BASE}${path}`, { method: 'POST', cache: 'no-store' })
       .then(checkOk)
       .then(() => loadStatus())
-      .catch((e) => setConnectionError(e.message))
+      .catch(handleError)
   }
 
   function handleDisarm() {
@@ -593,12 +728,14 @@ function App() {
       <audio ref=${alarmAudioRef} src="./audio/alarm-intercom.wav" preload="auto"></audio>
       <div class="toolbar"><${ThemeToggle} theme=${theme} setTheme=${setTheme} /></div>
       <main>
-        ${connectionError
+        ${authError &&
+        html`<${LoginForm} forbidden=${authError === 403} onLoggedIn=${() => { setAuthError(null); loadStatus() }} onCancel=${() => setAuthError(null)} />`}
+        ${!authError && connectionError
           ? html`<div class="connection-banner">
               <strong>\u26a0 Can\u2019t reach the SignalK server.</strong>
               <span>${connectionError}</span>
             </div>`
-          : html`<p class="loading-note">Loading\u2026</p>`}
+          : !authError && html`<p class="loading-note">Loading\u2026</p>`}
       </main>
     `
   }
@@ -628,6 +765,8 @@ function App() {
       ${!(status.config && status.config.autoTheme) && html`<${ThemeToggle} theme=${theme} setTheme=${setTheme} />`}
     </div>
     <main>
+      ${authError &&
+      html`<${LoginForm} forbidden=${authError === 403} onLoggedIn=${() => { setAuthError(null); loadStatus() }} onCancel=${() => setAuthError(null)} />`}
       ${connectionError &&
       html`<div class="connection-banner">
         <strong>\u26a0 Connection to the SignalK server lost.</strong>
@@ -638,7 +777,7 @@ function App() {
       </div>`}
 
       <button
-        class=${`state-button ${stage === 'emergency' ? 'blink' : ''} ${connectionError ? 'stale' : ''}`}
+        class=${`state-button ${stage === 'emergency' ? 'blink' : ''} ${connectionError || authError === 401 ? 'stale' : ''}`}
         style=${{ background: color, color: textColor }}
         onClick=${handleStateButton}
       >
@@ -650,7 +789,7 @@ function App() {
         <span class=${`state-cta ${stage === 'emergency' ? 'emergency-cta' : ''}`}>${ACK_LABEL[stage] || 'Tap to acknowledge'}</span>
       </button>
 
-      <div class=${`progress-track ${connectionError ? 'stale' : ''}`}>
+      <div class=${`progress-track ${connectionError || authError === 401 ? 'stale' : ''}`}>
         <div class="progress-fill" style=${{ width: `${fillPct}%`, background: color }}></div>
       </div>
     </main>
